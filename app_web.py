@@ -30,20 +30,11 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase con diagnostica errori
+# Connessione pulita e standard al database PostgreSQL di Supabase
 @st.cache_resource
 def get_engine():
-    try:
-        db_url = st.secrets["SUPABASE_URL"]
-        eng = create_engine(db_url)
-        # Test immediato della connessione per catturare eventuali errori
-        with eng.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        return eng
-    except Exception as e:
-        st.error(f"❌ ERRORE DI CONNESSIONE AL DATABASE SUPABASE: {e}")
-        st.info("💡 Verifica che la stringa nei Secrets sia corretta e che la password abbia i caratteri speciali codificati (es. %21 al posto di !).")
-        st.stop()
+    db_url = st.secrets["SUPABASE_URL"]
+    return create_engine(db_url)
 
 engine = get_engine()
 
