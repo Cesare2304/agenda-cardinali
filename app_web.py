@@ -31,7 +31,7 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase (tramite parametri strutturati)
+# Connessione al database PostgreSQL via Supabase con parametri strutturati
 @st.cache_resource
 def get_engine():
     s = st.secrets["supabase"]
@@ -213,38 +213,4 @@ elif scelta == "Gestione Clienti e Tecnici":
             st.dataframe(c_df, use_container_width=True)
             id_del_c = st.selectbox("ID Cliente da rimuovere", [0] + c_df['id'].tolist(), key="del_c")
             if id_del_c != 0 and st.button("Elimina Cliente"):
-                with engine.begin() as conn:
-                    conn.execute(text("DELETE FROM clienti WHERE id = :id"), {"id": id_del_c})
-                st.success("Cliente rimosso.")
-                st.rerun()
-        else:
-            st.info("Nessun cliente registrato.")
-
-    with col2:
-        st.subheader("Tecnici")
-        nuovo_tecnico = st.text_input("Nome Nuovo Tecnico")
-        if st.button("Aggiungi Tecnico"):
-            if nuovo_tecnico.strip():
-                try:
-                    with engine.begin() as conn:
-                        conn.execute(text("INSERT INTO tecnici (nome) VALUES (:n)"), {"n": nuovo_tecnico.strip()})
-                    st.success(f"Tecnico '{nuovo_tecnico}' aggiunto!")
-                    st.rerun()
-                except Exception:
-                    st.warning("Questo tecnico esiste già nel database.")
-            else:
-                st.error("Inserisci un nome valido.")
-                
-        with engine.connect() as conn:
-            t_df = pd.read_sql(text("SELECT id, nome FROM tecnici ORDER BY nome"), conn)
-        
-        if not t_df.empty:
-            st.dataframe(t_df, use_container_width=True)
-            id_del_t = st.selectbox("ID Tecnico da rimuovere", [0] + t_df['id'].tolist(), key="del_t")
-            if id_del_t != 0 and st.button("Elimina Tecnico"):
-                with engine.begin() as conn:
-                    conn.execute(text("DELETE FROM tecnici WHERE id = :id"), {"id": id_del_t})
-                st.success("Tecnico rimosso.")
-                st.rerun()
-        else:
-            st.info("Nessun tecnico registrato.")
+                with engine.
