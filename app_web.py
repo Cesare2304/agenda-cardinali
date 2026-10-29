@@ -12,7 +12,6 @@ st.set_page_config(
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Transaction Pooler (Supabase - eu-west-1)
 @st.cache_resource
 def get_engine():
     user = "postgres.uvxugxoqzhfhltqcevud"
@@ -24,7 +23,8 @@ def get_engine():
     db_url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}?sslmode=require"
     return create_engine(
         db_url,
-        pool_pre_ping=False,
+        pool_pre_ping=True,
+        pool_recycle=300,
         connect_args={"sslmode": "require"}
     )
 
@@ -32,23 +32,6 @@ engine = get_engine()
 
 def inizializza_db():
     with engine.begin() as conn:
-        # Creazione tabelle base se non esistono
-        conn.execute(text('''
-            CREATE TABLE IF NOT EXISTS appuntamenti (
-                id SERIAL PRIMARY KEY,
-                titolo TEXT NOT NULL,
-                cliente TEXT,
-                tecnico TEXT,
-                telefono TEXT,
-                categoria TEXT,
-                urgenza TEXT DEFAULT 'Normale',
-                data TEXT NOT NULL,
-                ora TEXT NOT NULL,
-                scadenza TEXT,
-                note TEXT,
-                stato TEXT DEFAULT 'Attivo'
-            )
-        '''))
         conn.execute(text('''
             CREATE TABLE IF NOT EXISTS clienti (
                 id SERIAL PRIMARY KEY,
@@ -68,49 +51,64 @@ def inizializza_db():
                 telefono TEXT
             )
         '''))
-
-    # Aggiunta sicura di tutte le colonne se la tabella esisteva già con struttura vecchia
-    colonne_da_aggiungere = [
-        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS telefono TEXT",
-        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS categoria TEXT",
-        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS urgenza TEXT DEFAULT 'Normale'",
-        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS scadenza TEXT",
-        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS stato TEXT DEFAULT 'Attivo'",
-        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS nome_azienda TEXT",
-        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS referente TEXT",
-        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS telefono TEXT",
-        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS email TEXT",
-        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS indirizzo TEXT",
-        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS note TEXT",
-        "ALTER TABLE tecnici ADD COLUMN IF NOT EXISTS specializzazione TEXT",
-        "ALTER TABLE tecnici ADD COLUMN IF NOT EXISTS telefono TEXT"
-    ]
-    for col_query in colonne_da_aggiungere:
-        try:
-            with engine.begin() as conn:
-                conn.execute(text(col_query))
-        except Exception:
-            pass
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS appuntamenti (
+                id SERIAL PRIMARY KEY,
+                titolo TEXT NOT NULL,
+                cliente TEXT,
+                tecnico TEXT,
+                telefono TEXT,
+                categoria TEXT,
+                urgenza TEXT DEFAULT 'Normale',
+                data TEXT NOT NULL,
+                ora TEXT NOT NULL,
+                scadenza TEXT,
+                note TEXT,
+                stato TEXT DEFAULT 'Attivo'
+            )
+        '''))
+    
+    # Auto-riparazione colonne se la tabella esisteva già parziale
+        queries = [
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS nome_azienda TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS referente TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS telefono TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS email TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS indirizzo TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS note TEXT",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS urgenza TEXT DEFAULT 'Normale'",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS telefono TEXT",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS categoria TEXT",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS scadenza TEXT",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS stato TEXT DEFAULT 'Attivo'"
+        ]
+        for q in queries:
+            try:
+                conn.execute(text(q))
+            except Exception:
+                pass
 
 inizializza_db()
 
-# Funzioni di utilità con cache per velocizzare drasticamente il caricamento
-@st.cache_data(ttl=60)
 def get_clienti():
-    with engine.connect() as conn:
-        res = pd.read_sql(text('SELECT nome_azienda FROM clienti ORDER BY nome_azienda ASC'), conn)
-    return res['nome_azienda'].tolist() if not res.empty else []
+    try:
+        with engine.connect() as conn:
+            res = pd.read_sql(text('SELECT nome_azienda FROM clienti ORDER BY nome_azienda ASC'), conn)
+        return res['nome_azienda'].tolist() if not res.empty else []
+    except Exception:
+        return []
 
-@st.cache_data(ttl=60)
 def get_tecnici():
-    with engine.connect() as conn:
-        res = pd.read_sql(text('SELECT nome FROM tecnici ORDER BY nome ASC'), conn)
-    return res['nome'].tolist() if not res.empty else []
+    try:
+        with engine.connect() as conn:
+            res = pd.read_sql(text('SELECT nome FROM tecnici ORDER BY nome ASC'), conn)
+        return res['nome'].tolist() if not res.empty else []
+    except Exception:
+        return []
 
 if 'menu_selezionato' not in st.session_state:
     st.session_state.menu_selezionato = "📅 Planning Principale"
 
-# ==================== MENU LATERALE FISSO ====================
 st.sidebar.title(f"📅 {NOME_DITTA}")
 st.sidebar.markdown("---")
 
@@ -124,9 +122,12 @@ if st.sidebar.button("🛠️ Gestione Tecnici", use_container_width=True):
     st.session_state.menu_selezionato = "🛠️ Gestione Tecnici"
 
 st.sidebar.markdown("---")
-with engine.connect() as conn:
-    res_urg = conn.execute(text("SELECT COUNT(*) FROM appuntamenti WHERE urgenza = 'Urgente' AND (stato = 'Attivo' OR stato IS NULL)")).fetchone()
-    count_urgenti = res_urg[0] if res_urg else 0
+try:
+    with engine.connect() as conn:
+        res_urg = conn.execute(text("SELECT COUNT(*) FROM appuntamenti WHERE urgenza = 'Urgente' AND (stato = 'Attivo' OR stato IS NULL)")).fetchone()
+        count_urgenti = res_urg[0] if res_urg else 0
+except Exception:
+    count_urgenti = 0
 
 if count_urgenti > 0:
     st.sidebar.error(f"⚠️ Interventi Urgenti: **{count_urgenti}**")
@@ -174,7 +175,6 @@ if menu == "📅 Planning Principale":
                                 "ora": ora_app, "scad": scadenza_app.strftime('%Y-%m-%d'), "n": note
                             }
                         )
-                    st.cache_data.clear()
                     st.success("Attività salvata con successo!")
                     st.rerun()
 
@@ -187,16 +187,19 @@ if menu == "📅 Planning Principale":
         filtro_urgenza = st.selectbox("Filtra per Urgenza", ["Tutti", "Urgente", "Normale", "Meno urgente"])
     with f_col3:
         st.markdown("<br>", unsafe_allow_html=True)
-        with engine.connect() as conn:
-            df_export = pd.read_sql(text("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Attivo' OR stato IS NULL"), conn)
-        csv_data = df_export.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📊 Esporta Excel",
-            data=csv_data,
-            file_name="interventi_attivi_agenda.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+        try:
+            with engine.connect() as conn:
+                df_export = pd.read_sql(text("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Attivo' OR stato IS NULL"), conn)
+            csv_data = df_export.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📊 Esporta Excel",
+                data=csv_data,
+                file_name="interventi_attivi_agenda.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        except Exception:
+            st.info("Impossibile esportare al momento.")
 
     query = """
         SELECT id, data, ora, titolo, cliente, tecnico, telefono, categoria, urgenza, scadenza, note 
@@ -223,8 +226,11 @@ if menu == "📅 Planning Principale":
         END ASC, data ASC, ora ASC
     """
     
-    with engine.connect() as conn:
-        rows = conn.execute(text(query), params).fetchall()
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(query), params).fetchall()
+    except Exception:
+        rows = []
 
     if rows:
         for r in rows:
@@ -249,7 +255,6 @@ if menu == "📅 Planning Principale":
                 if st.button("✔️ Chiudi", key=f"chiudi_{r[0]}"):
                     with engine.begin() as conn:
                         conn.execute(text("UPDATE appuntamenti SET stato = 'Chiuso' WHERE id = :id"), {"id": r[0]})
-                    st.cache_data.clear()
                     st.success("Intervento archiviato!")
                     st.rerun()
             with c_btn2:
@@ -259,7 +264,6 @@ if menu == "📅 Planning Principale":
                 if st.button("🗑️ Elimina", key=f"del_{r[0]}"):
                     with engine.begin() as conn:
                         conn.execute(text("DELETE FROM appuntamenti WHERE id = :id"), {"id": r[0]})
-                    st.cache_data.clear()
                     st.rerun()
 
             if st.session_state.get(f"edit_app_{r[0]}", False):
@@ -292,7 +296,6 @@ if menu == "📅 Planning Principale":
                                 text("UPDATE appuntamenti SET titolo=:t, cliente=:c, tecnico=:tec, urgenza=:urg, telefono=:tel, note=:n WHERE id=:id"),
                                 {"t": new_titolo, "c": new_cliente, "tec": new_tecnico, "urg": new_urg, "tel": new_tel, "n": new_note, "id": r[0]}
                             )
-                        st.cache_data.clear()
                         st.session_state[f"edit_app_{r[0]}"] = False
                         st.success("Modifiche salvate!")
                         st.rerun()
@@ -310,16 +313,19 @@ elif menu == "📁 Archivio Storico":
         ricerca_arc = st.text_input("🔍 Cerca nell'archivio storico")
     with arc_h2:
         st.markdown("<br>", unsafe_allow_html=True)
-        with engine.connect() as conn:
-            df_archivio = pd.read_sql(text("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Chiuso'"), conn)
-        csv_archivio = df_archivio.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📊 Esporta Storico",
-            data=csv_archivio,
-            file_name="archivio_interventi_agenda.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+        try:
+            with engine.connect() as conn:
+                df_archivio = pd.read_sql(text("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Chiuso'"), conn)
+            csv_archivio = df_archivio.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📊 Esporta Storico",
+                data=csv_archivio,
+                file_name="archivio_interventi_agenda.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        except Exception:
+            pass
     
     q = "SELECT id, data, ora, titolo, cliente, tecnico, telefono, categoria, urgenza, scadenza, note FROM appuntamenti WHERE stato = 'Chiuso'"
     params = {}
@@ -328,8 +334,11 @@ elif menu == "📁 Archivio Storico":
         params["p"] = f"%{ricerca_arc}%"
     q += " ORDER BY data DESC"
     
-    with engine.connect() as conn:
-        rows_arc = conn.execute(text(q), params).fetchall()
+    try:
+        with engine.connect() as conn:
+            rows_arc = conn.execute(text(q), params).fetchall()
+    except Exception:
+        rows_arc = []
     
     if rows_arc:
         for r in rows_arc:
@@ -342,7 +351,6 @@ elif menu == "📁 Archivio Storico":
             if st.button("🔄 Riattiva Intervento", key=f"riattiva_{r[0]}"):
                 with engine.begin() as conn:
                     conn.execute(text("UPDATE appuntamenti SET stato = 'Attivo' WHERE id = :id"), {"id": r[0]})
-                st.cache_data.clear()
                 st.success("Intervento rimesso nel planning attivo!")
                 st.rerun()
             st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
@@ -375,7 +383,6 @@ elif menu == "👥 Gestione Clienti":
                                 text('INSERT INTO clienti (nome_azienda, referente, telefono, email, indirizzo, note) VALUES (:n, :ref, :tel, :em, :ind, :not)'),
                                 {"n": cli_nome, "ref": cli_ref, "tel": cli_tel, "em": cli_email, "ind": cli_ind, "not": cli_note}
                             )
-                        st.cache_data.clear()
                         st.success("Cliente registrato con successo!")
                         st.rerun()
                     except Exception:
@@ -386,19 +393,25 @@ elif menu == "👥 Gestione Clienti":
         with c_h1:
             st.subheader("📋 Elenco Clienti Registrati")
         with c_h2:
-            with engine.connect() as conn:
-                df_clienti = pd.read_sql(text("SELECT nome_azienda, referente, telefono, email, indirizzo, note FROM clienti"), conn)
-            csv_clienti = df_clienti.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📊 Esporta Clienti",
-                data=csv_clienti,
-                file_name="clienti_agenda.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            try:
+                with engine.connect() as conn:
+                    df_clienti = pd.read_sql(text("SELECT nome_azienda, referente, telefono, email, indirizzo, note FROM clienti"), conn)
+                csv_clienti = df_clienti.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📊 Esporta Clienti",
+                    data=csv_clienti,
+                    file_name="clienti_agenda.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            except Exception:
+                pass
 
-        with engine.connect() as conn:
-            clienti_data = conn.execute(text("SELECT id, nome_azienda, referente, telefono, email, indirizzo, note FROM clienti ORDER BY nome_azienda ASC")).fetchall()
+        try:
+            with engine.connect() as conn:
+                clienti_data = conn.execute(text("SELECT id, nome_azienda, referente, telefono, email, indirizzo, note FROM clienti ORDER BY nome_azienda ASC")).fetchall()
+        except Exception:
+            clienti_data = []
         
         if clienti_data:
             for c in clienti_data:
@@ -419,7 +432,6 @@ elif menu == "👥 Gestione Clienti":
                         if st.button("🗑️ Elimina", key=f"del_cli_{c[0]}"):
                             with engine.begin() as conn:
                                 conn.execute(text("DELETE FROM clienti WHERE id = :id"), {"id": c[0]})
-                            st.cache_data.clear()
                             st.success("Cliente eliminato!")
                             st.rerun()
 
@@ -447,7 +459,6 @@ elif menu == "👥 Gestione Clienti":
                                             text("UPDATE clienti SET nome_azienda=:n, referente=:ref, telefono=:tel, email=:em, indirizzo=:ind, note=:not WHERE id=:id"),
                                             {"n": m_nome, "ref": m_ref, "tel": m_tel, "em": m_email, "ind": m_ind, "not": m_note, "id": c[0]}
                                         )
-                                    st.cache_data.clear()
                                     st.success("Aggiornato!")
                                     st.rerun()
                             with col_chiudi:
@@ -456,11 +467,14 @@ elif menu == "👥 Gestione Clienti":
                                     st.rerun()
 
                         st.markdown("##### 📂 Interventi collegati a questo cliente:")
-                        with engine.connect() as conn:
-                            app_cliente = conn.execute(
-                                text("SELECT data, ora, titolo, tecnico, urgenza, stato FROM appuntamenti WHERE cliente = :cli ORDER BY data DESC"),
-                                {"cli": c[1]}
-                            ).fetchall()
+                        try:
+                            with engine.connect() as conn:
+                                app_cliente = conn.execute(
+                                    text("SELECT data, ora, titolo, tecnico, urgenza, stato FROM appuntamenti WHERE cliente = :cli ORDER BY data DESC"),
+                                    {"cli": c[1]}
+                                ).fetchall()
+                        except Exception:
+                            app_cliente = []
                         
                         if app_cliente:
                             for ac in app_cliente:
@@ -494,7 +508,6 @@ elif menu == "🛠️ Gestione Tecnici":
                                 text('INSERT INTO tecnici (nome, specializzazione, telefono) VALUES (:n, :spec, :tel)'),
                                 {"n": tec_nome, "spec": tec_spec, "tel": tec_tel}
                             )
-                        st.cache_data.clear()
                         st.success("Tecnico aggiunto con successo!")
                         st.rerun()
                     except Exception:
@@ -505,19 +518,25 @@ elif menu == "🛠️ Gestione Tecnici":
         with t_h1:
             st.subheader("📋 Elenco Tecnici Aziendali")
         with t_h2:
-            with engine.connect() as conn:
-                df_tecnici = pd.read_sql(text("SELECT nome, specializzazione, telefono FROM tecnici"), conn)
-            csv_tecnici = df_tecnici.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📊 Esporta Tecnici",
-                data=csv_tecnici,
-                file_name="tecnici_agenda.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            try:
+                with engine.connect() as conn:
+                    df_tecnici = pd.read_sql(text("SELECT nome, specializzazione, telefono FROM tecnici"), conn)
+                csv_tecnici = df_tecnici.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📊 Esporta Tecnici",
+                    data=csv_tecnici,
+                    file_name="tecnici_agenda.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            except Exception:
+                pass
 
-        with engine.connect() as conn:
-            tecnici_data = conn.execute(text("SELECT id, nome, specializzazione, telefono FROM tecnici ORDER BY nome ASC")).fetchall()
+        try:
+            with engine.connect() as conn:
+                tecnici_data = conn.execute(text("SELECT id, nome, specializzazione, telefono FROM tecnici ORDER BY nome ASC")).fetchall()
+        except Exception:
+            tecnici_data = []
         
         if tecnici_data:
             for t in tecnici_data:
@@ -537,7 +556,6 @@ elif menu == "🛠️ Gestione Tecnici":
                         if st.button("🗑️ Elimina", key=f"del_tec_{t[0]}"):
                             with engine.begin() as conn:
                                 conn.execute(text("DELETE FROM tecnici WHERE id = :id"), {"id": t[0]})
-                            st.cache_data.clear()
                             st.success("Tecnico eliminato!")
                             st.rerun()
 
@@ -562,20 +580,22 @@ elif menu == "🛠️ Gestione Tecnici":
                                             text("UPDATE tecnici SET nome=:n, specializzazione=:spec, telefono=:tel WHERE id=:id"),
                                             {"n": tm_nome, "spec": tm_spec, "tel": tm_tel, "id": t[0]}
                                         )
-                                    st.cache_data.clear()
                                     st.success("Aggiornato!")
                                     st.rerun()
-                            with col_tchiudi:
+                            with col_chiudi:
                                 if st.form_submit_button("❌ Chiudi Scheda"):
                                     st.session_state["tecnico_attivo_id"] = None
                                     st.rerun()
 
                         st.markdown("##### 📂 Interventi assegnati a questo tecnico:")
-                        with engine.connect() as conn:
-                            app_tecnico = conn.execute(
-                                text("SELECT data, ora, titolo, cliente, urgenza, stato FROM appuntamenti WHERE tecnico = :tec ORDER BY data DESC"),
-                                {"tec": t[1]}
-                            ).fetchall()
+                        try:
+                            with engine.connect() as conn:
+                                app_tecnico = conn.execute(
+                                    text("SELECT data, ora, titolo, cliente, urgenza, stato FROM appuntamenti WHERE tecnico = :tec ORDER BY data DESC"),
+                                    {"tec": t[1]}
+                                ).fetchall()
+                        except Exception:
+                            app_tecnico = []
                         
                         if app_tecnico:
                             for at in app_tecnico:
