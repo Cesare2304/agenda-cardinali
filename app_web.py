@@ -31,12 +31,16 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase (legge il blocco [supabase] dei Secrets)
+# Connessione al database con parametri fissi (regione eu-west-1 forzata)
 @st.cache_resource
 def get_engine():
-    s = st.secrets["supabase"]
-    password_enc = urllib.parse.quote_plus(s["password"])
-    db_url = f"postgresql+psycopg2://{s['user']}:{password_enc}@{s['host']}:{s['port']}/{s['dbname']}?sslmode=require"
+    user = "postgres.uvxugxoqzhfhltqcevud"
+    password = urllib.parse.quote_plus("Viaroma23!2026")
+    host = "aws-0-eu-west-1.pooler.supabase.com"
+    port = 6543
+    dbname = "postgres"
+    
+    db_url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}?sslmode=require"
     return create_engine(
         db_url,
         pool_pre_ping=False,
