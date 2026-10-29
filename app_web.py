@@ -22,22 +22,19 @@ st.markdown("""
         height: 3em;
         font-weight: bold;
     }
+    .stTextInput>div>div>input, .stSelectbox>div>div>select, .stTextArea>div>div>textarea {
+        border-radius: 6px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase ottimizzata per evitare errori di pool
+# Connessione al database PostgreSQL via Supabase
 @st.cache_resource
 def get_engine():
     db_url = st.secrets["SUPABASE_URL"]
-    return create_engine(
-        db_url, 
-        connect_args={
-            "sslmode": "require",
-            "prepare_threshold": None  # Disabilita le prepared statements incompatibili con i pooler
-        }
-    )
+    return create_engine(db_url)
 
 engine = get_engine()
 
