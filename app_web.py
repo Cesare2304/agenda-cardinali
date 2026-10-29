@@ -32,6 +32,7 @@ engine = get_engine()
 
 def inizializza_db():
     with engine.begin() as conn:
+        # Creazione tabelle base se non esistono
         conn.execute(text('''
             CREATE TABLE IF NOT EXISTS appuntamenti (
                 id SERIAL PRIMARY KEY,
@@ -67,6 +68,13 @@ def inizializza_db():
                 telefono TEXT
             )
         '''))
+        
+        # Aggiunta automatica di colonne mancanti per tabelle preesistenti
+        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS urgenza TEXT DEFAULT 'Normale'"))
+        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS telefono TEXT"))
+        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS categoria TEXT"))
+        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS scadenza TEXT"))
+        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS stato TEXT DEFAULT 'Attivo'"))
 
 inizializza_db()
 
