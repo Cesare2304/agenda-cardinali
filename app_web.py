@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Stile CSS personalizzato per adattarsi a chiaro/scuro e migliorare la grafica
+# Stile CSS personalizzato
 st.markdown("""
     <style>
     .main {
@@ -30,11 +30,11 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase con SQLAlchemy
+# Connessione al database PostgreSQL via Supabase con SSL esplicito
 @st.cache_resource
 def get_engine():
     db_url = st.secrets["SUPABASE_URL"]
-    return create_engine(db_url)
+    return create_engine(db_url, connect_args={"sslmode": "require"})
 
 engine = get_engine()
 
@@ -80,7 +80,6 @@ scelta = st.sidebar.selectbox("Navigazione", menu)
 if scelta == "Pianificazione":
     st.header("📝 Nuovo Intervento")
     
-    # Caricamento anagrafiche da Supabase
     with engine.connect() as conn:
         clienti_df = pd.read_sql(text("SELECT nome FROM clienti ORDER BY nome"), conn)
         tecnici_df = pd.read_sql(text("SELECT nome FROM tecnici ORDER BY nome"), conn)
@@ -124,7 +123,7 @@ if scelta == "Pianificazione":
                             "s": "In programma"
                         }
                     )
-                st.success("🎉 Appuntamento salvato con successo e sincronizzato nel cloud per tutto il team!")
+                st.success("🎉 Appuntamento salvato con successo e sincronizzato nel cloud!")
 
 # ==========================================
 # 2. ARCHIVIO INTERVENTI
@@ -136,7 +135,6 @@ elif scelta == "Archivio Interventi":
         df = pd.read_sql(text("SELECT id, titolo, cliente, tecnico, data_ora, note, stato FROM appuntamenti ORDER BY data_ora DESC"), conn)
     
     if not df.empty:
-        # Filtri rapidi
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             filtro_tecnico = st.selectbox("Filtra per Tecnico", ["Tutti"] + list(df['tecnico'].dropna().unique()))
@@ -151,7 +149,6 @@ elif scelta == "Archivio Interventi":
 
         st.dataframe(df_filtrato, use_container_width=True)
         
-        # Sezione per aggiornare lo stato o eliminare un intervento
         st.markdown("---")
         st.subheader("Gestione Intervento Selezionato")
         
@@ -187,7 +184,6 @@ elif scelta == "Gestione Clienti e Tecnici":
     
     col1, col2 = st.columns(2)
     
-    # Sezione Clienti
     with col1:
         st.subheader("Clienti")
         nuovo_cliente = st.text_input("Nome Nuovo Cliente")
@@ -217,7 +213,6 @@ elif scelta == "Gestione Clienti e Tecnici":
         else:
             st.info("Nessun cliente registrato.")
 
-    # Sezione Tecnici
     with col2:
         st.subheader("Tecnici")
         nuovo_tecnico = st.text_input("Nome Nuovo Tecnico")
