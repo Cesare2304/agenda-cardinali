@@ -10,7 +10,7 @@ st.set_page_config(
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase
+# Connessione al database PostgreSQL via Supabase (Pooler)
 @st.cache_resource
 def get_engine():
     db_url = st.secrets["SUPABASE_URL"]
