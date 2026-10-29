@@ -30,11 +30,15 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase
+# Connessione al database PostgreSQL via Supabase (Transaction Pooler)
 @st.cache_resource
 def get_engine():
     db_url = st.secrets["SUPABASE_URL"]
-    return create_engine(db_url)
+    return create_engine(
+        db_url,
+        pool_pre_ping=False,
+        connect_args={"sslmode": "require"}
+    )
 
 engine = get_engine()
 
