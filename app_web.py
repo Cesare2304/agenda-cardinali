@@ -8,23 +8,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# Applicazione CSS adattivo per temi chiaro e scuro
-st.markdown("""
-    <style>
-    .main {
-        padding: 1rem;
-    }
-    .stButton>button {
-        width: 100%;
-        border-radius: 8px;
-        height: 3em;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase utilizzando i Secrets
+# Connessione al database PostgreSQL via Supabase
 @st.cache_resource
 def get_engine():
     db_url = st.secrets["SUPABASE_URL"]
