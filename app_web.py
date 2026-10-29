@@ -68,13 +68,21 @@ def inizializza_db():
                 telefono TEXT
             )
         '''))
-        
-        # Aggiunta automatica di colonne mancanti per tabelle preesistenti
-        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS urgenza TEXT DEFAULT 'Normale'"))
-        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS telefono TEXT"))
-        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS categoria TEXT"))
-        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS scadenza TEXT"))
-        conn.execute(text("ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS stato TEXT DEFAULT 'Attivo'"))
+
+    # Aggiunta sicura delle colonne se la tabella esisteva già senza di esse
+    colonne_da_aggiungere = [
+        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS telefono TEXT",
+        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS categoria TEXT",
+        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS urgenza TEXT DEFAULT 'Normale'",
+        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS scadenza TEXT",
+        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS stato TEXT DEFAULT 'Attivo'"
+    ]
+    for col_query in colonne_da_aggiungere:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(col_query))
+        except Exception:
+            pass
 
 inizializza_db()
 
