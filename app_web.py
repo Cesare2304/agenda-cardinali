@@ -69,13 +69,21 @@ def inizializza_db():
             )
         '''))
 
-    # Aggiunta sicura delle colonne se la tabella esisteva già senza di esse
+    # Aggiunta sicura di tutte le colonne se la tabella esisteva già con struttura vecchia
     colonne_da_aggiungere = [
         "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS telefono TEXT",
         "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS categoria TEXT",
         "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS urgenza TEXT DEFAULT 'Normale'",
         "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS scadenza TEXT",
-        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS stato TEXT DEFAULT 'Attivo'"
+        "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS stato TEXT DEFAULT 'Attivo'",
+        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS nome_azienda TEXT",
+        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS referente TEXT",
+        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS telefono TEXT",
+        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS email TEXT",
+        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS indirizzo TEXT",
+        "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS note TEXT",
+        "ALTER TABLE tecnici ADD COLUMN IF NOT EXISTS specializzazione TEXT",
+        "ALTER TABLE tecnici ADD COLUMN IF NOT EXISTS telefono TEXT"
     ]
     for col_query in colonne_da_aggiungere:
         try:
@@ -86,11 +94,14 @@ def inizializza_db():
 
 inizializza_db()
 
+# Funzioni di utilità con cache per velocizzare drasticamente il caricamento
+@st.cache_data(ttl=60)
 def get_clienti():
     with engine.connect() as conn:
         res = pd.read_sql(text('SELECT nome_azienda FROM clienti ORDER BY nome_azienda ASC'), conn)
     return res['nome_azienda'].tolist() if not res.empty else []
 
+@st.cache_data(ttl=60)
 def get_tecnici():
     with engine.connect() as conn:
         res = pd.read_sql(text('SELECT nome FROM tecnici ORDER BY nome ASC'), conn)
@@ -127,7 +138,7 @@ if menu == "📅 Planning Principale":
     st.title("📅 Planning Attività e Urgenze")
     
     with st.expander("➕ Inserisci Nuovo Appuntamento / Attività", expanded=False):
-        with st.form("form_nuovo_app"):
+        with st.form("form_nuovo_app", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
                 titolo = st.text_input("Titolo Attività *")
@@ -163,6 +174,7 @@ if menu == "📅 Planning Principale":
                                 "ora": ora_app, "scad": scadenza_app.strftime('%Y-%m-%d'), "n": note
                             }
                         )
+                    st.cache_data.clear()
                     st.success("Attività salvata con successo!")
                     st.rerun()
 
@@ -237,6 +249,7 @@ if menu == "📅 Planning Principale":
                 if st.button("✔️ Chiudi", key=f"chiudi_{r[0]}"):
                     with engine.begin() as conn:
                         conn.execute(text("UPDATE appuntamenti SET stato = 'Chiuso' WHERE id = :id"), {"id": r[0]})
+                    st.cache_data.clear()
                     st.success("Intervento archiviato!")
                     st.rerun()
             with c_btn2:
@@ -246,6 +259,7 @@ if menu == "📅 Planning Principale":
                 if st.button("🗑️ Elimina", key=f"del_{r[0]}"):
                     with engine.begin() as conn:
                         conn.execute(text("DELETE FROM appuntamenti WHERE id = :id"), {"id": r[0]})
+                    st.cache_data.clear()
                     st.rerun()
 
             if st.session_state.get(f"edit_app_{r[0]}", False):
@@ -278,6 +292,7 @@ if menu == "📅 Planning Principale":
                                 text("UPDATE appuntamenti SET titolo=:t, cliente=:c, tecnico=:tec, urgenza=:urg, telefono=:tel, note=:n WHERE id=:id"),
                                 {"t": new_titolo, "c": new_cliente, "tec": new_tecnico, "urg": new_urg, "tel": new_tel, "n": new_note, "id": r[0]}
                             )
+                        st.cache_data.clear()
                         st.session_state[f"edit_app_{r[0]}"] = False
                         st.success("Modifiche salvate!")
                         st.rerun()
@@ -327,6 +342,7 @@ elif menu == "📁 Archivio Storico":
             if st.button("🔄 Riattiva Intervento", key=f"riattiva_{r[0]}"):
                 with engine.begin() as conn:
                     conn.execute(text("UPDATE appuntamenti SET stato = 'Attivo' WHERE id = :id"), {"id": r[0]})
+                st.cache_data.clear()
                 st.success("Intervento rimesso nel planning attivo!")
                 st.rerun()
             st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
@@ -341,7 +357,7 @@ elif menu == "👥 Gestione Clienti":
     
     with col_ins:
         st.subheader("➕ Registra Nuovo Cliente")
-        with st.form("form_cliente"):
+        with st.form("form_cliente", clear_on_submit=True):
             cli_nome = st.text_input("Nome Azienda *")
             cli_ref = st.text_input("Referente")
             cli_tel = st.text_input("Telefono")
@@ -359,6 +375,7 @@ elif menu == "👥 Gestione Clienti":
                                 text('INSERT INTO clienti (nome_azienda, referente, telefono, email, indirizzo, note) VALUES (:n, :ref, :tel, :em, :ind, :not)'),
                                 {"n": cli_nome, "ref": cli_ref, "tel": cli_tel, "em": cli_email, "ind": cli_ind, "not": cli_note}
                             )
+                        st.cache_data.clear()
                         st.success("Cliente registrato con successo!")
                         st.rerun()
                     except Exception:
@@ -402,6 +419,7 @@ elif menu == "👥 Gestione Clienti":
                         if st.button("🗑️ Elimina", key=f"del_cli_{c[0]}"):
                             with engine.begin() as conn:
                                 conn.execute(text("DELETE FROM clienti WHERE id = :id"), {"id": c[0]})
+                            st.cache_data.clear()
                             st.success("Cliente eliminato!")
                             st.rerun()
 
@@ -429,6 +447,7 @@ elif menu == "👥 Gestione Clienti":
                                             text("UPDATE clienti SET nome_azienda=:n, referente=:ref, telefono=:tel, email=:em, indirizzo=:ind, note=:not WHERE id=:id"),
                                             {"n": m_nome, "ref": m_ref, "tel": m_tel, "em": m_email, "ind": m_ind, "not": m_note, "id": c[0]}
                                         )
+                                    st.cache_data.clear()
                                     st.success("Aggiornato!")
                                     st.rerun()
                             with col_chiudi:
@@ -460,7 +479,7 @@ elif menu == "🛠️ Gestione Tecnici":
     
     with col_t_ins:
         st.subheader("➕ Inserisci Nuovo Tecnico")
-        with st.form("form_tecnico"):
+        with st.form("form_tecnico", clear_on_submit=True):
             tec_nome = st.text_input("Nome Tecnico *")
             tec_spec = st.text_input("Specializzazione")
             tec_tel = st.text_input("Telefono")
@@ -475,6 +494,7 @@ elif menu == "🛠️ Gestione Tecnici":
                                 text('INSERT INTO tecnici (nome, specializzazione, telefono) VALUES (:n, :spec, :tel)'),
                                 {"n": tec_nome, "spec": tec_spec, "tel": tec_tel}
                             )
+                        st.cache_data.clear()
                         st.success("Tecnico aggiunto con successo!")
                         st.rerun()
                     except Exception:
@@ -517,6 +537,7 @@ elif menu == "🛠️ Gestione Tecnici":
                         if st.button("🗑️ Elimina", key=f"del_tec_{t[0]}"):
                             with engine.begin() as conn:
                                 conn.execute(text("DELETE FROM tecnici WHERE id = :id"), {"id": t[0]})
+                            st.cache_data.clear()
                             st.success("Tecnico eliminato!")
                             st.rerun()
 
@@ -541,6 +562,7 @@ elif menu == "🛠️ Gestione Tecnici":
                                             text("UPDATE tecnici SET nome=:n, specializzazione=:spec, telefono=:tel WHERE id=:id"),
                                             {"n": tm_nome, "spec": tm_spec, "tel": tm_tel, "id": t[0]}
                                         )
+                                    st.cache_data.clear()
                                     st.success("Aggiornato!")
                                     st.rerun()
                             with col_tchiudi:
