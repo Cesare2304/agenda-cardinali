@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine, text
 from datetime import datetime
+import urllib.parse
 
 # Configurazione della pagina
 st.set_page_config(
@@ -30,10 +31,12 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase (Transaction Pooler)
+# Connessione al database PostgreSQL via Supabase (tramite parametri strutturati)
 @st.cache_resource
 def get_engine():
-    db_url = st.secrets["SUPABASE_URL"]
+    s = st.secrets["supabase"]
+    password_enc = urllib.parse.quote_plus(s["password"])
+    db_url = f"postgresql+psycopg2://{s['user']}:{password_enc}@{s['host']}:{s['port']}/{s['dbname']}?sslmode=require"
     return create_engine(
         db_url,
         pool_pre_ping=False,
