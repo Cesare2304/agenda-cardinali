@@ -1,8 +1,8 @@
-import sqlite3
-import datetime
-import os
 import streamlit as st
 import pandas as pd
+from sqlalchemy import create_engine, text
+import urllib.parse
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
     page_title="Agenda Cardinali",
@@ -12,74 +12,104 @@ st.set_page_config(
 
 NOME_DITTA = 'Agenda Cardinali'
 
-def get_db_path():
-    appdata_dir = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'AgendaCardinali')
-    try:
-        os.makedirs(appdata_dir, exist_ok=True)
-        return os.path.join(appdata_dir, 'agenda.db')
-    except Exception:
-        return 'agenda.db'
+# Configura l'aggiornamento automatico ogni 10 secondi (10000 millisecondi)
+# per sincronizzare in tempo reale le modifiche tra i vari dispositivi
+count = st_autorefresh(interval=10000, limit=None, key="agenda_autorefresh")
 
-DB_PATH = get_db_path()
+# Connessione al database PostgreSQL su Supabase
+@st.cache_resource
+def get_engine():
+    user = "postgres.uvxugxoqzhfhltqcevud"
+    password = urllib.parse.quote_plus("Viaroma23!2026")
+    host = "aws-0-eu-west-1.pooler.supabase.com"
+    port = 6543
+    dbname = "postgres"
+    
+    db_url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}?sslmode=require"
+    return create_engine(
+        db_url,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        connect_args={"sslmode": "require"}
+    )
+
+engine = get_engine()
 
 def inizializza_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS appuntamenti (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titolo TEXT NOT NULL,
-            cliente TEXT,
-            tecnico TEXT,
-            telefono TEXT,
-            categoria TEXT,
-            urgenza TEXT DEFAULT 'Normale',
-            data TEXT NOT NULL,
-            ora TEXT NOT NULL,
-            scadenza TEXT,
-            note TEXT,
-            stato TEXT DEFAULT 'Attivo'
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS clienti (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome_azienda TEXT NOT NULL,
-            referente TEXT,
-            telefono TEXT,
-            email TEXT,
-            indirizzo TEXT,
-            note TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tecnici (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            specializzazione TEXT,
-            telefono TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    with engine.begin() as conn:
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS clienti (
+                id SERIAL PRIMARY KEY,
+                nome_azienda TEXT NOT NULL,
+                referente TEXT,
+                telefono TEXT,
+                email TEXT,
+                indirizzo TEXT,
+                note TEXT
+            )
+        '''))
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS tecnici (
+                id SERIAL PRIMARY KEY,
+                nome TEXT NOT NULL,
+                specializzazione TEXT,
+                telefono TEXT
+            )
+        '''))
+        conn.execute(text('''
+            CREATE TABLE IF NOT EXISTS appuntamenti (
+                id SERIAL PRIMARY KEY,
+                titolo TEXT NOT NULL,
+                cliente TEXT,
+                tecnico TEXT,
+                telefono TEXT,
+                categoria TEXT,
+                urgenza TEXT DEFAULT 'Normale',
+                data TEXT NOT NULL,
+                ora TEXT NOT NULL,
+                scadenza TEXT,
+                note TEXT,
+                stato TEXT DEFAULT 'Attivo'
+            )
+        '''))
+        
+        # Auto-riparazione colonne nel caso la tabella esistesse già
+        queries = [
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS nome_azienda TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS referente TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS telefono TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS email TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS indirizzo TEXT",
+            "ALTER TABLE clienti ADD COLUMN IF NOT EXISTS note TEXT",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS urgenza TEXT DEFAULT 'Normale'",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS telefono TEXT",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS categoria TEXT",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS scadenza TEXT",
+            "ALTER TABLE appuntamenti ADD COLUMN IF NOT EXISTS stato TEXT DEFAULT 'Attivo'"
+        ]
+        for q in queries:
+            try:
+                conn.execute(text(q))
+            except Exception:
+                pass
 
 inizializza_db()
 
 def get_clienti():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('SELECT nome_azienda FROM clienti ORDER BY nome_azienda ASC')
-    res = [r[0] for r in cursor.fetchall()]
-    conn.close()
-    return res
+    try:
+        with engine.connect() as conn:
+            res = pd.read_sql(text('SELECT nome_azienda FROM clienti ORDER BY nome_azienda ASC'), conn)
+        return res['nome_azienda'].tolist() if not res.empty else []
+    except Exception:
+        return []
 
 def get_tecnici():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('SELECT nome FROM tecnici ORDER BY nome ASC')
-    res = [r[0] for r in cursor.fetchall()]
-    conn.close()
-    return res
+    try:
+        with engine.connect() as conn:
+            res = pd.read_sql(text('SELECT nome FROM tecnici ORDER BY nome ASC'), conn)
+        return res['nome'].tolist() if not res.empty else []
+    except Exception:
+        return []
 
 if 'menu_selezionato' not in st.session_state:
     st.session_state.menu_selezionato = "📅 Planning Principale"
@@ -99,12 +129,11 @@ if st.sidebar.button("🛠️ Gestione Tecnici", use_container_width=True):
 
 st.sidebar.markdown("---")
 
-# Sezione impostazioni visualizzazione per proiettore / schermo grande
+# Impostazioni schermo per proiettore
 st.sidebar.subheader("🖥️ Impostazioni Schermo")
 dim_testo = st.sidebar.slider("Dimensione testo Planning (px)", min_value=12, max_value=30, value=16)
 dim_titoli = st.sidebar.slider("Dimensione Titoli (px)", min_value=20, max_value=50, value=32)
 
-# Applicazione dinamica delle dimensioni tramite CSS personalizzato
 st.markdown(f"""
     <style>
     .planning-card {{
@@ -120,11 +149,12 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-conn = sqlite3.connect(DB_PATH)
-cursor = conn.cursor()
-cursor.execute("SELECT COUNT(*) FROM appuntamenti WHERE urgenza = 'Urgente' AND (stato = 'Attivo' OR stato IS NULL)")
-count_urgenti = cursor.fetchone()[0]
-conn.close()
+try:
+    with engine.connect() as conn:
+        res_urg = conn.execute(text("SELECT COUNT(*) FROM appuntamenti WHERE urgenza = 'Urgente' AND (stato = 'Attivo' OR stato IS NULL)")).fetchone()
+        count_urgenti = res_urg[0] if res_urg else 0
+except Exception:
+    count_urgenti = 0
 
 if count_urgenti > 0:
     st.sidebar.error(f"⚠️ Interventi Urgenti: **{count_urgenti}**")
@@ -160,14 +190,18 @@ if menu == "📅 Planning Principale":
                 if not titolo:
                     st.warning("Inserisci almeno il titolo dell'attività.")
                 else:
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO appuntamenti (titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Attivo')
-                    ''', (titolo, cliente, tecnico, telefono, categoria, urgenza, data_app.strftime('%Y-%m-%d'), ora_app, scadenza_app.strftime('%Y-%m-%d'), note))
-                    conn.commit()
-                    conn.close()
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text('''
+                                INSERT INTO appuntamenti (titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato)
+                                VALUES (:t, :c, :tec, :tel, :cat, :urg, :d, :ora, :scad, :n, 'Attivo')
+                            '''),
+                            {
+                                "t": titolo, "c": cliente, "tec": tecnico, "tel": telefono, 
+                                "cat": categoria, "urg": urgenza, "d": data_app.strftime('%Y-%m-%d'), 
+                                "ora": ora_app, "scad": scadenza_app.strftime('%Y-%m-%d'), "n": note
+                            }
+                        )
                     st.success("Attività salvata con successo!")
                     st.rerun()
 
@@ -180,36 +214,34 @@ if menu == "📅 Planning Principale":
         filtro_urgenza = st.selectbox("Filtra per Urgenza", ["Tutti", "Urgente", "Normale", "Meno urgente"])
     with f_col3:
         st.markdown("<br>", unsafe_allow_html=True)
-        conn = sqlite3.connect(DB_PATH)
-        df_export = pd.read_sql_query("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Attivo' OR stato IS NULL", conn)
-        conn.close()
-        csv_data = df_export.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📊 Esporta Excel",
-            data=csv_data,
-            file_name="interventi_attivi_agenda.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+        try:
+            with engine.connect() as conn:
+                df_export = pd.read_sql(text("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Attivo' OR stato IS NULL"), conn)
+            csv_data = df_export.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📊 Esporta Excel",
+                data=csv_data,
+                file_name="interventi_attivi_agenda.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        except Exception:
+            pass
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
     query = """
         SELECT id, data, ora, titolo, cliente, tecnico, telefono, categoria, urgenza, scadenza, note 
         FROM appuntamenti 
         WHERE (stato = 'Attivo' OR stato IS NULL)
     """
-    params = []
+    params = {}
     
     if ricerca_testo:
-        query += " AND (titolo LIKE ? OR cliente LIKE ? OR tecnico LIKE ?)"
-        p = f"%{ricerca_testo}%"
-        params.extend([p, p, p])
+        query += " AND (titolo ILIKE :p OR cliente ILIKE :p OR tecnico ILIKE :p)"
+        params["p"] = f"%{ricerca_testo}%"
         
     if filtro_urgenza != "Tutti":
-        query += " AND urgenza = ?"
-        params.append(filtro_urgenza)
+        query += " AND urgenza = :urg"
+        params["urg"] = filtro_urgenza
         
     query += """
         ORDER BY 
@@ -221,9 +253,11 @@ if menu == "📅 Planning Principale":
         END ASC, data ASC, ora ASC
     """
     
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text(query), params).fetchall()
+    except Exception:
+        rows = []
 
     if rows:
         for r in rows:
@@ -246,11 +280,8 @@ if menu == "📅 Planning Principale":
             c_btn1, c_btn2, c_btn3, _ = st.columns([1, 1, 1, 5])
             with c_btn1:
                 if st.button("✔️ Chiudi", key=f"chiudi_{r[0]}"):
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE appuntamenti SET stato = 'Chiuso' WHERE id = ?", (r[0],))
-                    conn.commit()
-                    conn.close()
+                    with engine.begin() as conn:
+                        conn.execute(text("UPDATE appuntamenti SET stato = 'Chiuso' WHERE id = :id"), {"id": r[0]})
                     st.success("Intervento archiviato!")
                     st.rerun()
             with c_btn2:
@@ -258,11 +289,8 @@ if menu == "📅 Planning Principale":
                     st.session_state[f"edit_app_{r[0]}"] = True
             with c_btn3:
                 if st.button("🗑️ Elimina", key=f"del_{r[0]}"):
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM appuntamenti WHERE id = ?", (r[0],))
-                    conn.commit()
-                    conn.close()
+                    with engine.begin() as conn:
+                        conn.execute(text("DELETE FROM appuntamenti WHERE id = :id"), {"id": r[0]})
                     st.rerun()
 
             if st.session_state.get(f"edit_app_{r[0]}", False):
@@ -290,12 +318,11 @@ if menu == "📅 Planning Principale":
                     new_note = st.text_input("Note", value=r[10])
                     
                     if st.form_submit_button("Salva Modifiche"):
-                        conn = sqlite3.connect(DB_PATH)
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE appuntamenti SET titolo=?, cliente=?, tecnico=?, urgenza=?, telefono=?, note=? WHERE id=?",
-                                       (new_titolo, new_cliente, new_tecnico, new_urg, new_tel, new_note, r[0]))
-                        conn.commit()
-                        conn.close()
+                        with engine.begin() as conn:
+                            conn.execute(
+                                text("UPDATE appuntamenti SET titolo=:t, cliente=:c, tecnico=:tec, urgenza=:urg, telefono=:tel, note=:n WHERE id=:id"),
+                                {"t": new_titolo, "c": new_cliente, "tec": new_tecnico, "urg": new_urg, "tel": new_tel, "n": new_note, "id": r[0]}
+                            )
                         st.session_state[f"edit_app_{r[0]}"] = False
                         st.success("Modifiche salvate!")
                         st.rerun()
@@ -313,30 +340,32 @@ elif menu == "📁 Archivio Storico":
         ricerca_arc = st.text_input("🔍 Cerca nell'archivio storico")
     with arc_h2:
         st.markdown("<br>", unsafe_allow_html=True)
-        conn = sqlite3.connect(DB_PATH)
-        df_archivio = pd.read_sql_query("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Chiuso'", conn)
-        conn.close()
-        csv_archivio = df_archivio.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📊 Esporta Storico",
-            data=csv_archivio,
-            file_name="archivio_interventi_agenda.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+        try:
+            with engine.connect() as conn:
+                df_archivio = pd.read_sql(text("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Chiuso'"), conn)
+            csv_archivio = df_archivio.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📊 Esporta Storico",
+                data=csv_archivio,
+                file_name="archivio_interventi_agenda.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        except Exception:
+            pass
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
     q = "SELECT id, data, ora, titolo, cliente, tecnico, telefono, categoria, urgenza, scadenza, note FROM appuntamenti WHERE stato = 'Chiuso'"
-    params = []
+    params = {}
     if ricerca_arc:
-        q += " AND (titolo LIKE ? OR cliente LIKE ?)"
-        p = f"%{ricerca_arc}%"
-        params.extend([p, p])
+        q += " AND (titolo ILIKE :p OR cliente ILIKE :p)"
+        params["p"] = f"%{ricerca_arc}%"
     q += " ORDER BY data DESC"
-    cursor.execute(q, params)
-    rows_arc = cursor.fetchall()
-    conn.close()
+    
+    try:
+        with engine.connect() as conn:
+            rows_arc = conn.execute(text(q), params).fetchall()
+    except Exception:
+        rows_arc = []
     
     if rows_arc:
         for r in rows_arc:
@@ -347,11 +376,8 @@ elif menu == "📁 Archivio Storico":
                 </div>
             """, unsafe_allow_html=True)
             if st.button("🔄 Riattiva Intervento", key=f"riattiva_{r[0]}"):
-                conn = sqlite3.connect(DB_PATH)
-                cursor = conn.cursor()
-                cursor.execute("UPDATE appuntamenti SET stato = 'Attivo' WHERE id = ?", (r[0],))
-                conn.commit()
-                conn.close()
+                with engine.begin() as conn:
+                    conn.execute(text("UPDATE appuntamenti SET stato = 'Attivo' WHERE id = :id"), {"id": r[0]})
                 st.success("Intervento rimesso nel planning attivo!")
                 st.rerun()
             st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
@@ -378,37 +404,41 @@ elif menu == "👥 Gestione Clienti":
                 if not cli_nome:
                     st.warning("Il nome azienda è obbligatorio.")
                 else:
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute('INSERT INTO clienti (nome_azienda, referente, telefono, email, indirizzo, note) VALUES (?, ?, ?, ?, ?, ?)',
-                                   (cli_nome, cli_ref, cli_tel, cli_email, cli_ind, cli_note))
-                    conn.commit()
-                    conn.close()
-                    st.success("Cliente registrato con successo!")
-                    st.rerun()
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(
+                                text('INSERT INTO clienti (nome_azienda, referente, telefono, email, indirizzo, note) VALUES (:n, :ref, :tel, :em, :ind, :not)'),
+                                {"n": cli_nome, "ref": cli_ref, "tel": cli_tel, "em": cli_email, "ind": cli_ind, "not": cli_note}
+                            )
+                        st.success("Cliente registrato con successo!")
+                        st.rerun()
+                    except Exception:
+                        st.error("Errore: un cliente con questo nome potrebbe esistere già.")
 
     with col_lista:
         c_h1, c_h2 = st.columns([2, 1])
         with c_h1:
             st.subheader("📋 Elenco Clienti Registrati")
         with c_h2:
-            conn = sqlite3.connect(DB_PATH)
-            df_clienti = pd.read_sql_query("SELECT nome_azienda, referente, telefono, email, indirizzo, note FROM clienti", conn)
-            conn.close()
-            csv_clienti = df_clienti.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📊 Esporta Clienti",
-                data=csv_clienti,
-                file_name="clienti_agenda.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            try:
+                with engine.connect() as conn:
+                    df_clienti = pd.read_sql(text("SELECT nome_azienda, referente, telefono, email, indirizzo, note FROM clienti"), conn)
+                csv_clienti = df_clienti.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📊 Esporta Clienti",
+                    data=csv_clienti,
+                    file_name="clienti_agenda.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            except Exception:
+                pass
 
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, nome_azienda, referente, telefono, email, indirizzo, note FROM clienti ORDER BY nome_azienda ASC")
-        clienti_data = cursor.fetchall()
-        conn.close()
+        try:
+            with engine.connect() as conn:
+                clienti_data = conn.execute(text("SELECT id, nome_azienda, referente, telefono, email, indirizzo, note FROM clienti ORDER BY nome_azienda ASC")).fetchall()
+        except Exception:
+            clienti_data = []
         
         if clienti_data:
             for c in clienti_data:
@@ -427,11 +457,8 @@ elif menu == "👥 Gestione Clienti":
                             st.session_state["cliente_attivo_id"] = c[0]
                     with c_b2:
                         if st.button("🗑️ Elimina", key=f"del_cli_{c[0]}"):
-                            conn = sqlite3.connect(DB_PATH)
-                            cursor = conn.cursor()
-                            cursor.execute("DELETE FROM clienti WHERE id = ?", (c[0],))
-                            conn.commit()
-                            conn.close()
+                            with engine.begin() as conn:
+                                conn.execute(text("DELETE FROM clienti WHERE id = :id"), {"id": c[0]})
                             st.success("Cliente eliminato!")
                             st.rerun()
 
@@ -454,12 +481,11 @@ elif menu == "👥 Gestione Clienti":
                             col_salva, col_chiudi = st.columns(2)
                             with col_salva:
                                 if st.form_submit_button("💾 Salva Modifiche"):
-                                    conn = sqlite3.connect(DB_PATH)
-                                    cursor = conn.cursor()
-                                    cursor.execute("UPDATE clienti SET nome_azienda=?, referente=?, telefono=?, email=?, indirizzo=?, note=? WHERE id=?",
-                                                   (m_nome, m_ref, m_tel, m_email, m_ind, m_note, c[0]))
-                                    conn.commit()
-                                    conn.close()
+                                    with engine.begin() as conn:
+                                        conn.execute(
+                                            text("UPDATE clienti SET nome_azienda=:n, referente=:ref, telefono=:tel, email=:em, indirizzo=:ind, note=:not WHERE id=:id"),
+                                            {"n": m_nome, "ref": m_ref, "tel": m_tel, "em": m_email, "ind": m_ind, "not": m_note, "id": c[0]}
+                                        )
                                     st.success("Aggiornato!")
                                     st.rerun()
                             with col_chiudi:
@@ -468,11 +494,14 @@ elif menu == "👥 Gestione Clienti":
                                     st.rerun()
 
                         st.markdown("##### 📂 Interventi collegati a questo cliente:")
-                        conn = sqlite3.connect(DB_PATH)
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT data, ora, titolo, tecnico, urgenza, stato FROM appuntamenti WHERE cliente = ? ORDER BY data DESC", (c[1],))
-                        app_cliente = cursor.fetchall()
-                        conn.close()
+                        try:
+                            with engine.connect() as conn:
+                                app_cliente = conn.execute(
+                                    text("SELECT data, ora, titolo, tecnico, urgenza, stato FROM appuntamenti WHERE cliente = :cli ORDER BY data DESC"),
+                                    {"cli": c[1]}
+                                ).fetchall()
+                        except Exception:
+                            app_cliente = []
                         
                         if app_cliente:
                             for ac in app_cliente:
@@ -500,36 +529,41 @@ elif menu == "🛠️ Gestione Tecnici":
                 if not tec_nome:
                     st.warning("Il nome del tecnico è obbligatorio.")
                 else:
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute('INSERT INTO tecnici (nome, specializzazione, telefono) VALUES (?, ?, ?)', (tec_nome, tec_spec, tec_tel))
-                    conn.commit()
-                    conn.close()
-                    st.success("Tecnico aggiunto con successo!")
-                    st.rerun()
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(
+                                text('INSERT INTO tecnici (nome, specializzazione, telefono) VALUES (:n, :spec, :tel)'),
+                                {"n": tec_nome, "spec": tec_spec, "tel": tec_tel}
+                            )
+                        st.success("Tecnico aggiunto con successo!")
+                        st.rerun()
+                    except Exception:
+                        st.error("Errore: un tecnico con questo nome potrebbe esistere già.")
 
     with col_t_lista:
         t_h1, t_h2 = st.columns([2, 1])
         with t_h1:
             st.subheader("📋 Elenco Tecnici Aziendali")
         with t_h2:
-            conn = sqlite3.connect(DB_PATH)
-            df_tecnici = pd.read_sql_query("SELECT nome, specializzazione, telefono FROM tecnici", conn)
-            conn.close()
-            csv_tecnici = df_tecnici.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📊 Esporta Tecnici",
-                data=csv_tecnici,
-                file_name="tecnici_agenda.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            try:
+                with engine.connect() as conn:
+                    df_tecnici = pd.read_sql(text("SELECT nome, specializzazione, telefono FROM tecnici"), conn)
+                csv_tecnici = df_tecnici.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📊 Esporta Tecnici",
+                    data=csv_tecnici,
+                    file_name="tecnici_agenda.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            except Exception:
+                pass
 
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, nome, specializzazione, telefono FROM tecnici ORDER BY nome ASC")
-        tecnici_data = cursor.fetchall()
-        conn.close()
+        try:
+            with engine.connect() as conn:
+                tecnici_data = conn.execute(text("SELECT id, nome, specializzazione, telefono FROM tecnici ORDER BY nome ASC")).fetchall()
+        except Exception:
+            tecnici_data = []
         
         if tecnici_data:
             for t in tecnici_data:
@@ -547,11 +581,8 @@ elif menu == "🛠️ Gestione Tecnici":
                             st.session_state["tecnico_attivo_id"] = t[0]
                     with t_b2:
                         if st.button("🗑️ Elimina", key=f"del_tec_{t[0]}"):
-                            conn = sqlite3.connect(DB_PATH)
-                            cursor = conn.cursor()
-                            cursor.execute("DELETE FROM tecnici WHERE id = ?", (t[0],))
-                            conn.commit()
-                            conn.close()
+                            with engine.begin() as conn:
+                                conn.execute(text("DELETE FROM tecnici WHERE id = :id"), {"id": t[0]})
                             st.success("Tecnico eliminato!")
                             st.rerun()
 
@@ -571,12 +602,11 @@ elif menu == "🛠️ Gestione Tecnici":
                             col_tsalva, col_tchiudi = st.columns(2)
                             with col_tsalva:
                                 if st.form_submit_button("💾 Salva Modifiche"):
-                                    conn = sqlite3.connect(DB_PATH)
-                                    cursor = conn.cursor()
-                                    cursor.execute("UPDATE tecnici SET nome=?, specializzazione=?, telefono=? WHERE id=?",
-                                                   (tm_nome, tm_spec, tm_tel, t[0]))
-                                    conn.commit()
-                                    conn.close()
+                                    with engine.begin() as conn:
+                                        conn.execute(
+                                            text("UPDATE tecnici SET nome=:n, specializzazione=:spec, telefono=:tel WHERE id=:id"),
+                                            {"n": tm_nome, "spec": tm_spec, "tel": tm_tel, "id": t[0]}
+                                        )
                                     st.success("Aggiornato!")
                                     st.rerun()
                             with col_tchiudi:
@@ -585,11 +615,14 @@ elif menu == "🛠️ Gestione Tecnici":
                                     st.rerun()
 
                         st.markdown("##### 📂 Interventi assegnati a questo tecnico:")
-                        conn = sqlite3.connect(DB_PATH)
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT data, ora, titolo, cliente, urgenza, stato FROM appuntamenti WHERE tecnico = ? ORDER BY data DESC", (t[1],))
-                        app_tecnico = cursor.fetchall()
-                        conn.close()
+                        try:
+                            with engine.connect() as conn:
+                                app_tecnico = conn.execute(
+                                    text("SELECT data, ora, titolo, cliente, urgenza, stato FROM appuntamenti WHERE tecnico = :tec ORDER BY data DESC"),
+                                    {"tec": t[1]}
+                                ).fetchall()
+                        except Exception:
+                            app_tecnico = []
                         
                         if app_tecnico:
                             for at in app_tecnico:
