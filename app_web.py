@@ -98,6 +98,28 @@ if st.sidebar.button("🛠️ Gestione Tecnici", use_container_width=True):
     st.session_state.menu_selezionato = "🛠️ Gestione Tecnici"
 
 st.sidebar.markdown("---")
+
+# Sezione impostazioni visualizzazione per proiettore / schermo grande
+st.sidebar.subheader("🖥️ Impostazioni Schermo")
+dim_testo = st.sidebar.slider("Dimensione testo Planning (px)", min_value=12, max_value=30, value=16)
+dim_titoli = st.sidebar.slider("Dimensione Titoli (px)", min_value=20, max_value=50, value=32)
+
+# Applicazione dinamica delle dimensioni tramite CSS personalizzato
+st.markdown(f"""
+    <style>
+    .planning-card {{
+        font-size: {dim_testo}px !important;
+    }}
+    .planning-card div {{
+        font-size: {dim_testo}px !important;
+    }}
+    h1 {{
+        font-size: {dim_titoli}px !important;
+    }}
+    </style>
+""", unsafe_allow_html=True)
+
+st.sidebar.markdown("---")
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 cursor.execute("SELECT COUNT(*) FROM appuntamenti WHERE urgenza = 'Urgente' AND (stato = 'Attivo' OR stato IS NULL)")
@@ -114,7 +136,7 @@ if menu == "📅 Planning Principale":
     st.title("📅 Planning Attività e Urgenze")
     
     with st.expander("➕ Inserisci Nuovo Appuntamento / Attività", expanded=False):
-        with st.form("form_nuovo_app"):
+        with st.form("form_nuovo_app", clear_on_submit=True):
             col1, col2, col3 = st.columns(3)
             with col1:
                 titolo = st.text_input("Titolo Attività *")
@@ -214,7 +236,7 @@ if menu == "📅 Planning Principale":
                 bg_color, border_color, col_colore = "rgba(207, 216, 220, 0.15)", "#CFD8DC", "⚪"
 
             st.markdown(f"""
-                <div style="background-color: {bg_color}; border-left: 6px solid {border_color}; padding: 12px; border-radius: 6px; margin-bottom: 10px;">
+                <div class="planning-card" style="background-color: {bg_color}; border-left: 6px solid {border_color}; padding: 14px; border-radius: 6px; margin-bottom: 10px;">
                     <div><b>{col_colore} Data:</b> {r[1]} alle {r[2]} &nbsp;|&nbsp; <b>Titolo:</b> {r[3]} &nbsp;|&nbsp; <b>Cliente:</b> {r[4]}</div>
                     <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} &nbsp;|&nbsp; <b>Tel:</b> {r[6]} &nbsp;|&nbsp; <b>Urgenza:</b> {r[8]} &nbsp;|&nbsp; <b>Scadenza:</b> {r[9]}</div>
                     <div style="margin-top: 4px; opacity: 0.8; font-style: italic;">Note: {r[10]}</div>
@@ -344,7 +366,7 @@ elif menu == "👥 Gestione Clienti":
     
     with col_ins:
         st.subheader("➕ Registra Nuovo Cliente")
-        with st.form("form_cliente"):
+        with st.form("form_cliente", clear_on_submit=True):
             cli_nome = st.text_input("Nome Azienda *")
             cli_ref = st.text_input("Referente")
             cli_tel = st.text_input("Telefono")
@@ -469,7 +491,7 @@ elif menu == "🛠️ Gestione Tecnici":
     
     with col_t_ins:
         st.subheader("➕ Inserisci Nuovo Tecnico")
-        with st.form("form_tecnico"):
+        with st.form("form_tecnico", clear_on_submit=True):
             tec_nome = st.text_input("Nome Tecnico *")
             tec_spec = st.text_input("Specializzazione")
             tec_tel = st.text_input("Telefono")
@@ -521,59 +543,4 @@ elif menu == "🛠️ Gestione Tecnici":
                     
                     t_b1, t_b2 = st.columns(2)
                     with t_b1:
-                        if st.button("⚙️ Gestisci / Storico", key=f"apri_tec_{t[0]}"):
-                            st.session_state["tecnico_attivo_id"] = t[0]
-                    with t_b2:
-                        if st.button("🗑️ Elimina", key=f"del_tec_{t[0]}"):
-                            conn = sqlite3.connect(DB_PATH)
-                            cursor = conn.cursor()
-                            cursor.execute("DELETE FROM tecnici WHERE id = ?", (t[0],))
-                            conn.commit()
-                            conn.close()
-                            st.success("Tecnico eliminato!")
-                            st.rerun()
-
-                if st.session_state.get("tecnico_attivo_id") == t[0]:
-                    with st.container():
-                        st.markdown(f"""
-                            <div style="background-color: rgba(33, 150, 243, 0.15); padding: 15px; border-radius: 6px; border: 1px solid #2196F3; margin-bottom: 10px;">
-                                <h4>Modifica Scheda: {t[1]}</h4>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        with st.form(f"form_mod_tec_{t[0]}"):
-                            tm_nome = st.text_input("Nome Tecnico", value=t[1])
-                            tm_spec = st.text_input("Specializzazione", value=t[2] or "")
-                            tm_tel = st.text_input("Telefono", value=t[3] or "")
-                            
-                            col_tsalva, col_tchiudi = st.columns(2)
-                            with col_tsalva:
-                                if st.form_submit_button("💾 Salva Modifiche"):
-                                    conn = sqlite3.connect(DB_PATH)
-                                    cursor = conn.cursor()
-                                    cursor.execute("UPDATE tecnici SET nome=?, specializzazione=?, telefono=? WHERE id=?",
-                                                   (tm_nome, tm_spec, tm_tel, t[0]))
-                                    conn.commit()
-                                    conn.close()
-                                    st.success("Aggiornato!")
-                                    st.rerun()
-                            with col_tchiudi:
-                                if st.form_submit_button("❌ Chiudi Scheda"):
-                                    st.session_state["tecnico_attivo_id"] = None
-                                    st.rerun()
-
-                        st.markdown("##### 📂 Interventi assegnati a questo tecnico:")
-                        conn = sqlite3.connect(DB_PATH)
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT data, ora, titolo, cliente, urgenza, stato FROM appuntamenti WHERE tecnico = ? ORDER BY data DESC", (t[1],))
-                        app_tecnico = cursor.fetchall()
-                        conn.close()
-                        
-                        if app_tecnico:
-                            for at in app_tecnico:
-                                stato_colore = "🟢 Attivo" if at[5] == "Attivo" else "📁 Chiuso"
-                                st.markdown(f"- **{at[0]} ({at[1]})** | *Titolo:* **{at[2]}** | *Cliente:* {at[3]} | *Urgenza:* {at[4]} | *Stato:* {stato_colore}")
-                        else:
-                            st.info("Nessun intervento assegnato a questo tecnico.")
-        else:
-            st.info("Nessun tecnico registrato.")
+                        if st.button("⚙
