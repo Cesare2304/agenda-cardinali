@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine, text
 from datetime import datetime
-import urllib.parse
 
 # Configurazione della pagina
 st.set_page_config(
@@ -31,18 +30,11 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase con parametri strutturati e DEBUG
+# Connessione al database PostgreSQL via Transaction Pooler di Supabase (URL diretto)
 @st.cache_resource
 def get_engine():
-    s = st.secrets["supabase"]
-    
-    # STAMPA DI CONTROLLO: Vediamo a schermo cosa sta leggendo veramente Streamlit
-    st.write("DEBUG - Host letto:", s["host"])
-    st.write("DEBUG - Porta letta:", s["port"])
-    st.write("DEBUG - Utente letto:", s["user"])
-    
-    password_enc = urllib.parse.quote_plus(s["password"])
-    db_url = f"postgresql+psycopg2://{s['user']}:{password_enc}@{s['host']}:{s['port']}/{s['dbname']}?sslmode=require"
+    # Legge direttamente la stringa completa dal secrets
+    db_url = st.secrets["SUPABASE_URL"]
     return create_engine(
         db_url,
         pool_pre_ping=False,
