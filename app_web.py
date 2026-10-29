@@ -543,4 +543,59 @@ elif menu == "🛠️ Gestione Tecnici":
                     
                     t_b1, t_b2 = st.columns(2)
                     with t_b1:
-                        if st.button("⚙
+                        if st.button("⚙️ Gestisci / Storico", key=f"apri_tec_{t[0]}"):
+                            st.session_state["tecnico_attivo_id"] = t[0]
+                    with t_b2:
+                        if st.button("🗑️ Elimina", key=f"del_tec_{t[0]}"):
+                            conn = sqlite3.connect(DB_PATH)
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM tecnici WHERE id = ?", (t[0],))
+                            conn.commit()
+                            conn.close()
+                            st.success("Tecnico eliminato!")
+                            st.rerun()
+
+                if st.session_state.get("tecnico_attivo_id") == t[0]:
+                    with st.container():
+                        st.markdown(f"""
+                            <div style="background-color: rgba(33, 150, 243, 0.15); padding: 15px; border-radius: 6px; border: 1px solid #2196F3; margin-bottom: 10px;">
+                                <h4>Modifica Scheda: {t[1]}</h4>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        with st.form(f"form_mod_tec_{t[0]}"):
+                            tm_nome = st.text_input("Nome Tecnico", value=t[1])
+                            tm_spec = st.text_input("Specializzazione", value=t[2] or "")
+                            tm_tel = st.text_input("Telefono", value=t[3] or "")
+                            
+                            col_tsalva, col_tchiudi = st.columns(2)
+                            with col_tsalva:
+                                if st.form_submit_button("💾 Salva Modifiche"):
+                                    conn = sqlite3.connect(DB_PATH)
+                                    cursor = conn.cursor()
+                                    cursor.execute("UPDATE tecnici SET nome=?, specializzazione=?, telefono=? WHERE id=?",
+                                                   (tm_nome, tm_spec, tm_tel, t[0]))
+                                    conn.commit()
+                                    conn.close()
+                                    st.success("Aggiornato!")
+                                    st.rerun()
+                            with col_tchiudi:
+                                if st.form_submit_button("❌ Chiudi Scheda"):
+                                    st.session_state["tecnico_attivo_id"] = None
+                                    st.rerun()
+
+                        st.markdown("##### 📂 Interventi assegnati a questo tecnico:")
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT data, ora, titolo, cliente, urgenza, stato FROM appuntamenti WHERE tecnico = ? ORDER BY data DESC", (t[1],))
+                        app_tecnico = cursor.fetchall()
+                        conn.close()
+                        
+                        if app_tecnico:
+                            for at in app_tecnico:
+                                stato_colore = "🟢 Attivo" if at[5] == "Attivo" else "📁 Chiuso"
+                                st.markdown(f"- **{at[0]} ({at[1]})** | *Titolo:* **{at[2]}** | *Cliente:* {at[3]} | *Urgenza:* {at[4]} | *Stato:* {stato_colore}")
+                        else:
+                            st.info("Nessun intervento assegnato a questo tecnico.")
+        else:
+            st.info("Nessun tecnico registrato.")
