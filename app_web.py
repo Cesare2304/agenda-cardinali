@@ -30,7 +30,7 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione pulita e standard al database PostgreSQL di Supabase
+# Connessione al database PostgreSQL via Supabase
 @st.cache_resource
 def get_engine():
     db_url = st.secrets["SUPABASE_URL"]
