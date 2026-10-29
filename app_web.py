@@ -11,7 +11,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Stile CSS personalizzato
+# Stile CSS personalizzato per un'interfaccia moderna e pulita
 st.markdown("""
     <style>
     .main {
@@ -31,7 +31,7 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database con parametri fissi (regione eu-west-1 forzata)
+# Connessione al database PostgreSQL via Transaction Pooler (Supabase - eu-west-1)
 @st.cache_resource
 def get_engine():
     user = "postgres.uvxugxoqzhfhltqcevud"
@@ -170,7 +170,11 @@ elif scelta == "Archivio Interventi":
             c_stato, c_del = st.columns(2)
             
             with c_stato:
-                nuovo_stato = st.selectbox("Aggiorna Stato", ["In programma", "Completato", "Annullato"], index=["In programma", "Completato", "Annullato"].index(riga_sel['stato']) if riga_sel['stato'] in ["In programma", "Completato", "Annullato"] else 0)
+                nuovo_stato = st.selectbox(
+                    "Aggiorna Stato", 
+                    ["In programma", "Completato", "Annullato"], 
+                    index=["In programma", "Completato", "Annullato"].index(riga_sel['stato']) if riga_sel['stato'] in ["In programma", "Completato", "Annullato"] else 0
+                )
                 if st.button("Aggiorna Stato"):
                     with engine.begin() as conn:
                         conn.execute(text("UPDATE appuntamenti SET stato = :s WHERE id = :id"), {"s": nuovo_stato, "id": id_selezionato})
