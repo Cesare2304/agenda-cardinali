@@ -31,10 +31,16 @@ st.markdown("""
 
 NOME_DITTA = 'Agenda Cardinali'
 
-# Connessione al database PostgreSQL via Supabase con parametri strutturati
+# Connessione al database PostgreSQL via Supabase con parametri strutturati e DEBUG
 @st.cache_resource
 def get_engine():
     s = st.secrets["supabase"]
+    
+    # STAMPA DI CONTROLLO: Vediamo a schermo cosa sta leggendo veramente Streamlit
+    st.write("DEBUG - Host letto:", s["host"])
+    st.write("DEBUG - Porta letta:", s["port"])
+    st.write("DEBUG - Utente letto:", s["user"])
+    
     password_enc = urllib.parse.quote_plus(s["password"])
     db_url = f"postgresql+psycopg2://{s['user']}:{password_enc}@{s['host']}:{s['port']}/{s['dbname']}?sslmode=require"
     return create_engine(
