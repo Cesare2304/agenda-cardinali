@@ -38,6 +38,9 @@ def inizializza_db():
             ora TEXT NOT NULL,
             scadenza TEXT,
             note TEXT,
+            gruppo TEXT DEFAULT 'generale',
+            dettaglio_interventi TEXT,
+            nota_chiusura TEXT,
             stato TEXT DEFAULT 'Attivo'
         )
     ''')
@@ -60,10 +63,53 @@ def inizializza_db():
             telefono TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS utenti (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password TEXT NOT NULL,
+            gruppo TEXT NOT NULL
+        )
+    ''')
+    # Inseriamo un utente admin di default se la tabella è vuota
+    cursor.execute("SELECT COUNT(*) FROM utenti")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO utenti (username, password, gruppo) VALUES (?, ?, ?)", ("admin", "admin123", "admin"))
+        cursor.execute("INSERT INTO utenti (username, password, gruppo) VALUES (?, ?, ?)", ("software", "soft123", "software"))
     conn.commit()
     conn.close()
 
 inizializza_db()
+
+# Gestione Autenticazione Utenti / Gruppi
+if 'autenticato' not in st.session_state:
+    st.session_state.autenticato = False
+    st.session_state.utente_corrente = None
+    st.session_state.gruppo_corrente = None
+
+if not st.session_state.autenticato:
+    st.title(f"🔐 Accesso Riservato - {NOME_DITTA}")
+    with st.form("form_login"):
+        username_input = st.text_input("Nome Utente / Gruppo")
+        password_input = st.text_input("Password", type="password")
+        submit_login = st.form_submit_button("Accedi al Gestionale")
+        
+        if submit_login:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT gruppo FROM utenti WHERE username = ? AND password = ?", (username_input, password_input))
+            res = cursor.fetchone()
+            conn.close()
+            
+            if res:
+                st.session_state.autenticato = True
+                st.session_state.utente_corrente = username_input
+                st.session_state.gruppo_corrente = res[0]
+                st.success("Accesso effettuato con successo!")
+                st.rerun()
+            else:
+                st.error("Credenziali non valide. Riprova.")
+    st.stop()
 
 def get_clienti():
     conn = sqlite3.connect(DB_PATH)
@@ -86,9 +132,15 @@ if 'menu_selezionato' not in st.session_state:
 
 # ==================== MENU LATERALE FISSO ====================
 st.sidebar.title(f"📅 {NOME_DITTA}")
+st.sidebar.markdown(f"👤 Utente: **{st.session_state.utente_corrente}** (*{st.session_state.gruppo_corrente}*)")
+if st.sidebar.button("🚪 Logout", use_container_width=True):
+    st.session_state.autenticato = False
+    st.session_state.utente_corrente = None
+    st.session_state.gruppo_corrente = None
+    st.rerun()
+
 st.sidebar.markdown("---")
 
-# Tasto rapido di aggiornamento/sincronizzazione
 if st.sidebar.button("🔄 Aggiorna / Sincronizza", use_container_width=True):
     st.rerun()
 
@@ -105,12 +157,9 @@ if st.sidebar.button("🛠️ Gestione Tecnici", use_container_width=True):
 
 st.sidebar.markdown("---")
 
-# Sezione impostazioni visualizzazione per proiettore / schermo grande
-st.sidebar.subheader("🖥️ Impostazioni Schermo")
 dim_testo = st.sidebar.slider("Dimensione testo Planning (px)", min_value=12, max_value=30, value=16)
 dim_titoli = st.sidebar.slider("Dimensione Titoli (px)", min_value=20, max_value=50, value=32)
 
-# Applicazione dinamica delle dimensioni tramite CSS personalizzato
 st.markdown(f"""
     <style>
     .planning-card {{
@@ -128,7 +177,10 @@ st.markdown(f"""
 st.sidebar.markdown("---")
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
-cursor.execute("SELECT COUNT(*) FROM appuntamenti WHERE urgenza = 'Urgente' AND (stato = 'Attivo' OR stato IS NULL)")
+if st.session_state.gruppo_corrente == "admin":
+    cursor.execute("SELECT COUNT(*) FROM appuntamenti WHERE urgenza = 'Urgente' AND (stato = 'Attivo' OR stato IS NULL)")
+else:
+    cursor.execute("SELECT COUNT(*) FROM appuntamenti WHERE urgenza = 'Urgente' AND (stato = 'Attivo' OR stato IS NULL) AND gruppo = ?", (st.session_state.gruppo_corrente,))
 count_urgenti = cursor.fetchone()[0]
 conn.close()
 
@@ -169,9 +221,9 @@ if menu == "📅 Planning Principale":
                     conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
                     cursor.execute('''
-                        INSERT INTO appuntamenti (titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Attivo')
-                    ''', (titolo, cliente, tecnico, telefono, categoria, urgenza, data_app.strftime('%Y-%m-%d'), ora_app, scadenza_app.strftime('%Y-%m-%d'), note))
+                        INSERT INTO appuntamenti (titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, gruppo, stato)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Attivo')
+                    ''', (titolo, cliente, tecnico, telefono, categoria, urgenza, data_app.strftime('%Y-%m-%d'), ora_app, scadenza_app.strftime('%Y-%m-%d'), note, st.session_state.gruppo_corrente))
                     conn.commit()
                     conn.close()
                     st.success("Attività salvata con successo!")
@@ -187,7 +239,10 @@ if menu == "📅 Planning Principale":
     with f_col3:
         st.markdown("<br>", unsafe_allow_html=True)
         conn = sqlite3.connect(DB_PATH)
-        df_export = pd.read_sql_query("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Attivo' OR stato IS NULL", conn)
+        if st.session_state.gruppo_corrente == "admin":
+            df_export = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, stato FROM appuntamenti WHERE stato = 'Attivo' OR stato IS NULL", conn)
+        else:
+            df_export = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, stato FROM appuntamenti WHERE (stato = 'Attivo' OR stato IS NULL) AND gruppo = ?", conn, params=(st.session_state.gruppo_corrente,))
         conn.close()
         csv_data = df_export.to_csv(index=False).encode('utf-8')
         st.download_button(
@@ -201,12 +256,20 @@ if menu == "📅 Planning Principale":
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    query = """
-        SELECT id, data, ora, titolo, cliente, tecnico, telefono, categoria, urgenza, scadenza, note 
-        FROM appuntamenti 
-        WHERE (stato = 'Attivo' OR stato IS NULL)
-    """
-    params = []
+    if st.session_state.gruppo_corrente == "admin":
+        query = """
+            SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura
+            FROM appuntamenti 
+            WHERE (stato = 'Attivo' OR stato IS NULL)
+        """
+        params = []
+    else:
+        query = """
+            SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura
+            FROM appuntamenti 
+            WHERE (stato = 'Attivo' OR stato IS NULL) AND gruppo = ?
+        """
+        params = [st.session_state.gruppo_corrente]
     
     if ricerca_testo:
         query += " AND (titolo LIKE ? OR cliente LIKE ? OR tecnico LIKE ?)"
@@ -233,7 +296,8 @@ if menu == "📅 Planning Principale":
 
     if rows:
         for r in rows:
-            urg = r[8]
+            # r: 0:id, 1:data, 2:ora, 3:titolo, 4:cliente, 5:tecnico, 6:categoria, 7:urgenza, 8:scadenza, 9:note, 10:dettaglio, 11:nota_chiusura
+            urg = r[7]
             if urg == "Urgente":
                 bg_color, border_color, col_colore = "rgba(229, 115, 115, 0.15)", "#E57373", "🔴"
             elif urg == "Meno urgente":
@@ -241,35 +305,71 @@ if menu == "📅 Planning Principale":
             else:
                 bg_color, border_color, col_colore = "rgba(207, 216, 220, 0.15)", "#CFD8DC", "⚪"
 
-            st.markdown(f"""
-                <div class="planning-card" style="background-color: {bg_color}; border-left: 6px solid {border_color}; padding: 14px; border-radius: 6px; margin-bottom: 10px;">
-                    <div><b>{col_colore} Data:</b> {r[1]} alle {r[2]} &nbsp;|&nbsp; <b>Titolo:</b> {r[3]} &nbsp;|&nbsp; <b>Cliente:</b> {r[4]}</div>
-                    <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} &nbsp;|&nbsp; <b>Tel:</b> {r[6]} &nbsp;|&nbsp; <b>Urgenza:</b> {r[8]} &nbsp;|&nbsp; <b>Scadenza:</b> {r[9]}</div>
-                    <div style="margin-top: 4px; opacity: 0.8; font-style: italic;">Note: {r[10]}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-            c_btn1, c_btn2, c_btn3, _ = st.columns([1, 1, 1, 5])
-            with c_btn1:
-                if st.button("✔️ Chiudi", key=f"chiudi_{r[0]}"):
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE appuntamenti SET stato = 'Chiuso' WHERE id = ?", (r[0],))
-                    conn.commit()
-                    conn.close()
-                    st.success("Intervento archiviato!")
-                    st.rerun()
-            with c_btn2:
-                if st.button("✏️ Modifica", key=f"mod_{r[0]}"):
+            col_card, col_btns = st.columns([4, 1])
+            with col_card:
+                st.markdown(f"""
+                    <div class="planning-card" style="background-color: {bg_color}; border-left: 6px solid {border_color}; padding: 14px; border-radius: 6px; margin-bottom: 10px;">
+                        <div><b>{col_colore} Cliente:</b> {r[4]} &nbsp;|&nbsp; <b>Titolo:</b> {r[3]} &nbsp;|&nbsp; <b>Data:</b> {r[1]} alle {r[2]}</div>
+                        <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} &nbsp;|&nbsp; <b>Urgenza:</b> {r[7]} &nbsp;|&nbsp; <b>Scadenza:</b> {r[8]}</div>
+                        <div style="margin-top: 4px; opacity: 0.8; font-style: italic;">Note: {r[9]}</div>
+                        <div style="margin-top: 4px; color: #1976D2;"><b>Interventi fatti:</b> {r[10] or 'Nessun dettaglio inserito'}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+            
+            with col_btns:
+                if st.button("🛠️ Interventi", key=f"int_{r[0]}", use_container_width=True):
+                    st.session_state[f"open_interventi_{r[0]}"] = not st.session_state.get(f"open_interventi_{r[0]}", False)
+                if st.button("✔️ Chiudi", key=f"chiudi_{r[0]}", use_container_width=True):
+                    st.session_state[f"open_chiusura_{r[0]}"] = True
+                if st.button("✏️ Modifica", key=f"mod_{r[0]}", use_container_width=True):
                     st.session_state[f"edit_app_{r[0]}"] = True
-            with c_btn3:
-                if st.button("🗑️ Elimina", key=f"del_{r[0]}"):
+                if st.button("🗑️ Elimina", key=f"del_{r[0]}", use_container_width=True):
                     conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
                     cursor.execute("DELETE FROM appuntamenti WHERE id = ?", (r[0],))
                     conn.commit()
                     conn.close()
                     st.rerun()
+
+            # Pannello per inserire gli interventi fatti e data/ora
+            if st.session_state.get(f"open_interventi_{r[0]}", False):
+                with st.form(f"form_int_fatti_{r[0]}"):
+                    st.subheader(f"Gestione Interventi Fatti - #{r[0]}")
+                    nuovo_intervento_testo = st.text_area("Aggiungi intervento fatto / lavorazione", value=r[10] or "")
+                    c_d1, c_d2 = st.columns(2)
+                    with c_d1:
+                        data_intervento_fatto = st.date_input("Data Intervento Fatto", value=datetime.date.today())
+                    with c_d2:
+                        ora_intervento_fatto = st.text_input("Ora Intervento Fatto", value="09:00")
+                    
+                    if st.form_submit_button("Salva Dettaglio Interventi"):
+                        stringa_aggiornata = f"[{data_intervento_fatto} {ora_intervento_fatto}] {nuovo_intervento_testo}"
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE appuntamenti SET dettaglio_interventi = ? WHERE id = ?", (stringa_aggiornata, r[0]))
+                        conn.commit()
+                        conn.close()
+                        st.session_state[f"open_interventi_{r[0]}"] = False
+                        st.success("Interventi salvati!")
+                        st.rerun()
+
+            # Pannello chiusura con nota finale
+            if st.session_state.get(f"open_chiusura_{r[0]}", False):
+                with st.form(f"form_chiusura_{r[0]}"):
+                    st.subheader(f"Chiusura Intervento #{r[0]}")
+                    nota_fin = st.text_area("Nota finale di chiusura *")
+                    if st.form_submit_button("Conferma e Archivia"):
+                        if not nota_fin:
+                            st.warning("Inserisci una nota finale di chiusura.")
+                        else:
+                            conn = sqlite3.connect(DB_PATH)
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE appuntamenti SET stato = 'Chiuso', nota_chiusura = ? WHERE id = ?", (nota_fin, r[0]))
+                            conn.commit()
+                            conn.close()
+                            st.session_state[f"open_chiusura_{r[0]}"] = False
+                            st.success("Intervento chiuso e archiviato con successo!")
+                            st.rerun()
 
             if st.session_state.get(f"edit_app_{r[0]}", False):
                 with st.form(f"form_mod_app_{r[0]}"):
@@ -291,15 +391,14 @@ if menu == "📅 Planning Principale":
                     new_tecnico = st.selectbox("Tecnico", t_list if t_list else [""], index=t_idx)
                     
                     urg_list = ["Urgente", "Normale", "Meno urgente"]
-                    new_urg = st.selectbox("Urgenza", urg_list, index=urg_list.index(r[8]) if r[8] in urg_list else 1)
-                    new_tel = st.text_input("Telefono", value=r[6])
-                    new_note = st.text_input("Note", value=r[10])
+                    new_urg = st.selectbox("Urgenza", urg_list, index=urg_list.index(r[7]) if r[7] in urg_list else 1)
+                    new_note = st.text_input("Note", value=r[9])
                     
                     if st.form_submit_button("Salva Modifiche"):
                         conn = sqlite3.connect(DB_PATH)
                         cursor = conn.cursor()
-                        cursor.execute("UPDATE appuntamenti SET titolo=?, cliente=?, tecnico=?, urgenza=?, telefono=?, note=? WHERE id=?",
-                                       (new_titolo, new_cliente, new_tecnico, new_urg, new_tel, new_note, r[0]))
+                        cursor.execute("UPDATE appuntamenti SET titolo=?, cliente=?, tecnico=?, urgenza=?, note=? WHERE id=?",
+                                       (new_titolo, new_cliente, new_tecnico, new_urg, new_note, r[0]))
                         conn.commit()
                         conn.close()
                         st.session_state[f"edit_app_{r[0]}"] = False
@@ -320,7 +419,10 @@ elif menu == "📁 Archivio Storico":
     with arc_h2:
         st.markdown("<br>", unsafe_allow_html=True)
         conn = sqlite3.connect(DB_PATH)
-        df_archivio = pd.read_sql_query("SELECT titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, stato FROM appuntamenti WHERE stato = 'Chiuso'", conn)
+        if st.session_state.gruppo_corrente == "admin":
+            df_archivio = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, stato FROM appuntamenti WHERE stato = 'Chiuso'", conn)
+        else:
+            df_archivio = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, stato FROM appuntamenti WHERE stato = 'Chiuso' AND gruppo = ?", conn, params=(st.session_state.gruppo_corrente,))
         conn.close()
         csv_archivio = df_archivio.to_csv(index=False).encode('utf-8')
         st.download_button(
@@ -333,8 +435,13 @@ elif menu == "📁 Archivio Storico":
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    q = "SELECT id, data, ora, titolo, cliente, tecnico, telefono, categoria, urgenza, scadenza, note FROM appuntamenti WHERE stato = 'Chiuso'"
-    params = []
+    if st.session_state.gruppo_corrente == "admin":
+        q = "SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura FROM appuntamenti WHERE stato = 'Chiuso'"
+        params = []
+    else:
+        q = "SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura FROM appuntamenti WHERE stato = 'Chiuso' AND gruppo = ?"
+        params = [st.session_state.gruppo_corrente]
+
     if ricerca_arc:
         q += " AND (titolo LIKE ? OR cliente LIKE ?)"
         p = f"%{ricerca_arc}%"
@@ -348,8 +455,8 @@ elif menu == "📁 Archivio Storico":
         for r in rows_arc:
             st.markdown(f"""
                 <div style="background-color: rgba(120, 144, 156, 0.15); border-left: 6px solid #78909C; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
-                    <div><b>Data:</b> {r[1]} - {r[2]} | <b>Titolo:</b> {r[3]} | <b>Cliente:</b> {r[4]}</div>
-                    <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} | <b>Scadenza:</b> {r[9]} | <b>Note:</b> {r[10]}</div>
+                    <div><b>Cliente:</b> {r[4]} | <b>Titolo:</b> {r[3]} | <b>Data:</b> {r[1]} - {r[2]}</div>
+                    <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} | <b>Nota Chiusura:</b> {r[11]}</div>
                 </div>
             """, unsafe_allow_html=True)
             if st.button("🔄 Riattiva Intervento", key=f"riattiva_{r[0]}"):
