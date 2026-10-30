@@ -45,7 +45,6 @@ def inizializza_db():
         )
     ''')
     
-    # Aggiunge in sicurezza le colonne se il database esiste già senza di esse
     for col, col_type in [("gruppo", "TEXT DEFAULT 'generale'"), ("dettaglio_interventi", "TEXT"), ("nota_chiusura", "TEXT")]:
         try:
             cursor.execute(f"ALTER TABLE appuntamenti ADD COLUMN {col} {col_type}")
@@ -162,21 +161,39 @@ if st.sidebar.button("👥 Gestione Clienti", use_container_width=True):
 if st.sidebar.button("🛠️ Gestione Tecnici", use_container_width=True):
     st.session_state.menu_selezionato = "🛠️ Gestione Tecnici"
 
+# Sezione dedicata ai gruppi (visibile per tutti o riservata all'admin)
+if st.session_state.gruppo_corrente == "admin":
+    if st.sidebar.button("🏢 Gestione Gruppi", use_container_width=True):
+        st.session_state.menu_selezionato = "🏢 Gestione Gruppi"
+
 st.sidebar.markdown("---")
 
 dim_testo = st.sidebar.slider("Dimensione testo Planning (px)", min_value=12, max_value=30, value=16)
 dim_titoli = st.sidebar.slider("Dimensione Titoli (px)", min_value=20, max_value=50, value=32)
 
+# CSS personalizzato per allineare card e pulsanti con altezza omogenea
 st.markdown(f"""
     <style>
     .planning-card {{
         font-size: {dim_testo}px !important;
+        padding: 12px;
+        border-radius: 6px;
+        margin-bottom: 0px;
+        height: 100%;
+        box-sizing: border-box;
     }}
     .planning-card div {{
         font-size: {dim_testo}px !important;
     }}
     h1 {{
         font-size: {dim_titoli}px !important;
+    }}
+    /* Omogeneizza i pulsanti laterali */
+    .stButton button {{
+        width: 100%;
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 14px;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -265,14 +282,14 @@ if menu == "📅 Planning Principale":
     
     if st.session_state.gruppo_corrente == "admin":
         query = """
-            SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura
+            SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura, gruppo
             FROM appuntamenti 
             WHERE (stato = 'Attivo' OR stato IS NULL)
         """
         params = []
     else:
         query = """
-            SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura
+            SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura, gruppo
             FROM appuntamenti 
             WHERE (stato = 'Attivo' OR stato IS NULL) AND gruppo = ?
         """
@@ -311,24 +328,27 @@ if menu == "📅 Planning Principale":
             else:
                 bg_color, border_color, col_colore = "rgba(207, 216, 220, 0.15)", "#CFD8DC", "⚪"
 
-            col_card, col_btns = st.columns([4, 1])
+            col_card, col_b1, col_b2, col_b3, col_b4 = st.columns([4, 1, 1, 1, 1])
             with col_card:
                 st.markdown(f"""
-                    <div class="planning-card" style="background-color: {bg_color}; border-left: 6px solid {border_color}; padding: 14px; border-radius: 6px; margin-bottom: 10px;">
-                        <div><b>{col_colore} Cliente:</b> {r[4]} &nbsp;|&nbsp; <b>Titolo:</b> {r[3]} &nbsp;|&nbsp; <b>Data:</b> {r[1]} alle {r[2]}</div>
+                    <div class="planning-card" style="background-color: {bg_color}; border-left: 6px solid {border_color};">
+                        <div><b>{col_colore} Cliente:</b> {r[4]} &nbsp;|&nbsp; <b>Titolo:</b> {r[3]} &nbsp;|&nbsp; <b>Data:</b> {r[1]} alle {r[2]} &nbsp;|&nbsp; <b>Gruppo:</b> <i>{r[12]}</i></div>
                         <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} &nbsp;|&nbsp; <b>Urgenza:</b> {r[7]} &nbsp;|&nbsp; <b>Scadenza:</b> {r[8]}</div>
                         <div style="margin-top: 4px; opacity: 0.8; font-style: italic;">Note: {r[9]}</div>
                         <div style="margin-top: 4px; color: #1976D2;"><b>Interventi fatti:</b> {r[10] or 'Nessun dettaglio inserito'}</div>
                     </div>
                 """, unsafe_allow_html=True)
             
-            with col_btns:
+            with col_b1:
                 if st.button("🛠️ Interventi", key=f"int_{r[0]}", use_container_width=True):
                     st.session_state[f"open_interventi_{r[0]}"] = not st.session_state.get(f"open_interventi_{r[0]}", False)
+            with col_b2:
                 if st.button("✔️ Chiudi", key=f"chiudi_{r[0]}", use_container_width=True):
                     st.session_state[f"open_chiusura_{r[0]}"] = True
+            with col_b3:
                 if st.button("✏️ Modifica", key=f"mod_{r[0]}", use_container_width=True):
                     st.session_state[f"edit_app_{r[0]}"] = True
+            with col_b4:
                 if st.button("🗑️ Elimina", key=f"del_{r[0]}", use_container_width=True):
                     conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
@@ -409,7 +429,7 @@ if menu == "📅 Planning Principale":
                         st.success("Modifiche salvate!")
                         st.rerun()
 
-            st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
     else:
         st.info("Nessuna attività attiva trovata.")
 
@@ -493,7 +513,7 @@ elif menu == "👥 Gestione Clienti":
                 
             if st.form_submit_button("Salva Cliente"):
                 if not cli_nome:
-                    st.warning(" Il nome azienda è obbligatorio.")
+                    st.warning("Il nome azienda è obbligatorio.")
                 else:
                     conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
@@ -696,6 +716,8 @@ elif menu == "🛠️ Gestione Tecnici":
                                     conn.close()
                                     st.success("Aggiornato!")
                                     st.rerun()
+                            with col_tsalva:
+                                pass
                             with col_tchiudi:
                                 if st.form_submit_button("❌ Chiudi Scheda"):
                                     st.session_state["tecnico_attivo_id"] = None
@@ -716,3 +738,58 @@ elif menu == "🛠️ Gestione Tecnici":
                             st.info("Nessun intervento assegnato a questo tecnico.")
         else:
             st.info("Nessun tecnico registrato.")
+
+# ==================== SEZIONE 5: GESTIONE GRUPPI ====================
+elif menu == "🏢 Gestione Gruppi":
+    st.title("🏢 Gestione Gruppi e Utenti di Accesso")
+    
+    g_col1, g_col2 = st.columns([1, 1])
+    
+    with g_col1:
+        st.subheader("➕ Crea Nuovo Utente / Gruppo")
+        with st.form("form_nuovo_utente", clear_on_submit=True):
+            nuovo_user = st.text_input("Nome Utente / Username *")
+            nuova_pass = st.text_input("Password *", type="password")
+            nuovo_gruppo = st.text_input("Nome Gruppo di Competenza * (es. software, amministrazione)")
+            
+            if st.form_submit_button("Salva Utente e Gruppo"):
+                if not nuovo_user or not nuova_pass or not nuovo_gruppo:
+                    st.warning("Tutti i campi sono obbligatori.")
+                else:
+                    try:
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO utenti (username, password, gruppo) VALUES (?, ?, ?)", (nuovo_user, nuova_pass, nuovo_gruppo))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Gruppo '{nuovo_gruppo}' e utente '{nuovo_user}' creati con successo!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore (probabile username già esistente): {e}")
+
+    with g_col2:
+        st.subheader("📋 Elenco Gruppi e Utenti Attivi")
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, gruppo FROM utenti ORDER BY gruppo ASC")
+        utenti_data = cursor.fetchall()
+        conn.close()
+        
+        if utenti_data:
+            for u in utenti_data:
+                st.markdown(f"""
+                    <div style="background-color: rgba(150, 150, 150, 0.1); padding: 10px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 8px;">
+                        👤 <b>Utente:</b> {u[1]} &nbsp;|&nbsp; 🏢 <b>Gruppo:</b> <code>{u[2]}</code>
+                    </div>
+                """, unsafe_allow_html=True)
+                if u[1] != "admin":
+                    if st.button("🗑️ Elimina Utente", key=f"del_user_{u[0]}"):
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM utenti WHERE id = ?", (u[0],))
+                        conn.commit()
+                        conn.close()
+                        st.success("Utente eliminato!")
+                        st.rerun()
+        else:
+            st.info("Nessun utente registrato oltre all'amministratore.")
