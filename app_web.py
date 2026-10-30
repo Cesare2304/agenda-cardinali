@@ -168,7 +168,6 @@ if st.sidebar.button("🔄 Aggiorna / Sincronizza", use_container_width=True):
 
 st.sidebar.markdown("---")
 
-# Selezione Pagine con Radio Button nativo (affidabile e senza schermate bianche)
 pagine_disponibili = ["📅 Planning Principale", "📁 Archivio Storico", "👥 Gestione Clienti", "🛠️ Gestione Tecnici"]
 if st.session_state.gruppo_corrente == "admin":
     pagine_disponibili.append("🏢 Gestione Gruppi e Utenti")
@@ -333,4 +332,84 @@ if menu == "📅 Planning Principale":
             if urg == "Urgente":
                 bg_color, border_color, col_colore = "rgba(229, 115, 115, 0.15)", "#E57373", "🔴"
             elif urg == "Meno urgente":
-                bg_color, border_color, col_colore = "rgba(129, 19
+                bg_color, border_color, col_colore = "rgba(129, 199, 132, 0.15)", "#81C784", "🟢"
+            else:
+                bg_color, border_color, col_colore = "rgba(207, 216, 220, 0.15)", "#CFD8DC", "⚪"
+
+            col_card, col_buttons = st.columns([10, 1.5])
+            with col_card:
+                st.markdown(f"""
+                    <div class="planning-card" style="background-color: {bg_color}; border-left: 6px solid {border_color};">
+                        <div><b>{col_colore} Data:</b> {r[1]} alle {r[2]} &nbsp;|&nbsp; <b>Titolo:</b> {r[3]} &nbsp;|&nbsp; <b>Cliente:</b> {r[4]} &nbsp;|&nbsp; <b>Gruppo:</b> <i>{r[12]}</i></div>
+                        <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} &nbsp;|&nbsp; <b>Urgenza:</b> {r[7]} &nbsp;|&nbsp; <b>Scadenza:</b> {r[8]}</div>
+                        <div style="margin-top: 4px; opacity: 0.8; font-style: italic;">Note: {r[9]}</div>
+                        <div style="margin-top: 4px; color: #1976D2;"><b>Interventi fatti:</b> {r[10] or 'Nessun dettaglio inserito'}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+            
+            with col_buttons:
+                if st.button("🛠️ Interventi", key=f"int_{r[0]}", use_container_width=True):
+                    st.session_state[f"open_interventi_{r[0]}"] = not st.session_state.get(f"open_interventi_{r[0]}", False)
+                if st.button("✔️ Chiudi", key=f"chiudi_{r[0]}", use_container_width=True):
+                    st.session_state[f"open_chiusura_{r[0]}"] = True
+                if st.button("✏️ Modifica", key=f"mod_{r[0]}", use_container_width=True):
+                    st.session_state[f"edit_app_{r[0]}"] = True
+                if st.button("🗑️ Elimina", key=f"del_{r[0]}", use_container_width=True):
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM appuntamenti WHERE id = ?", (r[0],))
+                    conn.commit()
+                    conn.close()
+                    st.rerun()
+
+            if st.session_state.get(f"open_interventi_{r[0]}", False):
+                with st.form(f"form_int_fatti_{r[0]}"):
+                    st.subheader(f"Gestione Interventi Fatti - #{r[0]}")
+                    nuovo_intervento_testo = st.text_area("Aggiungi intervento fatto / lavorazione", value=r[10] or "")
+                    c_d1, c_d2 = st.columns(2)
+                    with c_d1:
+                        data_intervento_fatto = st.date_input("Data Intervento Fatto", value=datetime.date.today())
+                    with c_d2:
+                        ora_intervento_fatto = st.text_input("Ora Intervento Fatto", value="09:00")
+                    
+                    if st.form_submit_button("Salva Dettaglio Interventi"):
+                        stringa_aggiornata = f"[{data_intervento_fatto} {ora_intervento_fatto}] {nuovo_intervento_testo}"
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE appuntamenti SET dettaglio_interventi = ? WHERE id = ?", (stringa_aggiornata, r[0]))
+                        conn.commit()
+                        conn.close()
+                        st.session_state[f"open_interventi_{r[0]}"] = False
+                        st.success("Interventi salvati!")
+                        st.rerun()
+
+            if st.session_state.get(f"open_chiusura_{r[0]}", False):
+                with st.form(f"form_chiusura_{r[0]}"):
+                    st.subheader(f"Chiusura Intervento #{r[0]}")
+                    nota_fin = st.text_area("Nota finale di chiusura *")
+                    if st.form_submit_button("Conferma e Archivia"):
+                        if not nota_fin:
+                            st.warning("Inserisci una nota finale di chiusura.")
+                        else:
+                            conn = sqlite3.connect(DB_PATH)
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE appuntamenti SET stato = 'Chiuso', nota_chiusura = ? WHERE id = ?", (nota_fin, r[0]))
+                            conn.commit()
+                            conn.close()
+                            st.session_state[f"open_chiusura_{r[0]}"] = False
+                            st.success("Intervento chiuso e archiviato con successo!")
+                            st.rerun()
+
+            if st.session_state.get(f"edit_app_{r[0]}", False):
+                with st.form(f"form_mod_app_{r[0]}"):
+                    st.subheader(f"Modifica Intervento #{r[0]}")
+                    new_titolo = st.text_input("Titolo", value=r[3])
+                    
+                    c_list = get_clienti()
+                    try:
+                        c_idx = c_list.index(r[4]) if r[4] in c_list else 0
+                    except:
+                        c_idx = 0
+                    new_cliente = st.selectbox("Cliente", c_list if c_list else [""], index=c_idx)
+                    
+                    t_list = get
