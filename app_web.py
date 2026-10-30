@@ -73,11 +73,18 @@ def inizializza_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
-            gruppo TEXT NOT NULL,
+            gruppo TEXT NOT NULL DEFAULT 'generale',
             telefono TEXT
         )
     ''')
     
+    # Aggiornamento sicuro colonne per la tabella utenti se il DB esisteva già
+    for col, col_type in [("gruppo", "TEXT NOT NULL DEFAULT 'generale'"), ("telefono", "TEXT")]:
+        try:
+            cursor.execute(f"ALTER TABLE utenti ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass
+
     cursor.execute("SELECT COUNT(*) FROM gruppi")
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO gruppi (nome_gruppo) VALUES ('admin')")
@@ -93,6 +100,7 @@ def inizializza_db():
 
 inizializza_db()
 
+# Gestione Autenticazione Utenti / Gruppi
 if 'autenticato' not in st.session_state:
     st.session_state.autenticato = False
     st.session_state.utente_corrente = None
