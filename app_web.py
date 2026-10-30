@@ -134,7 +134,6 @@ def get_clienti():
     return res
 
 def get_tecnici():
-    # I tecnici sono gli utenti registrati
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT username FROM utenti ORDER BY username ASC')
@@ -190,7 +189,6 @@ dim_titoli = st.sidebar.slider("Dimensione Titoli (px)", min_value=20, max_value
 
 st.markdown(f"""
     <style>
-    /* Riduzione aggressiva spazi nella barra laterale */
     [data-testid="stSidebar"] div.block-container {{
         padding-top: 0.5rem !important;
         padding-bottom: 0.5rem !important;
@@ -507,117 +505,3 @@ elif menu == "📁 Archivio Storico":
         params = [st.session_state.gruppo_corrente]
 
     if ricerca_arc:
-        q += " AND (titolo LIKE ? OR cliente LIKE ?)"
-        p = f"%{ricerca_arc}%"
-        params.extend([p, p])
-    q += " ORDER BY data DESC"
-    cursor.execute(q, params)
-    rows_arc = cursor.fetchall()
-    conn.close()
-    
-    if rows_arc:
-        for r in rows_arc:
-            st.markdown(f"""
-                <div style="background-color: rgba(120, 144, 156, 0.15); border-left: 6px solid #78909C; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
-                    <div><b>Cliente:</b> {r[4]} | <b>Titolo:</b> {r[3]} | <b>Data:</b> {r[1]} - {r[2]}</div>
-                    <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} | <b>Nota Chiusura:</b> {r[11]}</div>
-                </div>
-            """, unsafe_allow_html=True)
-            if st.button("🔄 Riattiva Intervento", key=f"riattiva_{r[0]}"):
-                conn = sqlite3.connect(DB_PATH)
-                cursor = conn.cursor()
-                cursor.execute("UPDATE appuntamenti SET stato = 'Attivo' WHERE id = ?", (r[0],))
-                conn.commit()
-                conn.close()
-                st.success("Intervento rimesso nel planning attivo!")
-                st.rerun()
-            st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
-    else:
-        st.info("L'archivio storico è vuoto.")
-
-# ==================== SEZIONE 3: CLIENTI ====================
-elif menu == "👥 Gestione Clienti":
-    st.title("👥 Gestione e Anagrafica Clienti")
-    
-    col_ins, col_lista = st.columns([1, 1])
-    
-    with col_ins:
-        st.subheader("➕ Registra Nuovo Cliente")
-        with st.form("form_cliente", clear_on_submit=True):
-            cli_nome = st.text_input("Nome Azienda *")
-            cli_ref = st.text_input("Referente")
-            cli_tel = st.text_input("Telefono")
-            cli_email = st.text_input("Email")
-            cli_ind = st.text_input("Indirizzo")
-            cli_note = st.text_input("Note")
-                
-            if st.form_submit_button("Salva Cliente"):
-                if not cli_nome:
-                    st.warning("Il nome azienda è obbligatorio.")
-                else:
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute('INSERT INTO clienti (nome_azienda, referente, telefono, email, indirizzo, note) VALUES (?, ?, ?, ?, ?, ?)',
-                                   (cli_nome, cli_ref, cli_tel, cli_email, cli_ind, cli_note))
-                    conn.commit()
-                    conn.close()
-                    st.success("Cliente registrato con successo!")
-                    st.rerun()
-
-    with col_lista:
-        c_h1, c_h2 = st.columns([2, 1])
-        with c_h1:
-            st.subheader("📋 Elenco Clienti Registrati")
-        with c_h2:
-            conn = sqlite3.connect(DB_PATH)
-            df_clienti = pd.read_sql_query("SELECT nome_azienda, referente, telefono, email, indirizzo, note FROM clienti", conn)
-            conn.close()
-            csv_clienti = df_clienti.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📊 Esporta Clienti",
-                data=csv_clienti,
-                file_name="clienti_agenda.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, nome_azienda, referente, telefono, email, indirizzo, note FROM clienti ORDER BY nome_azienda ASC")
-        clienti_data = cursor.fetchall()
-        conn.close()
-        
-        if clienti_data:
-            for c in clienti_data:
-                with st.container():
-                    st.markdown(f"""
-                        <div style="background-color: rgba(150, 150, 150, 0.1); padding: 10px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 8px;">
-                            🏢 <b>{c[1]}</b><br>
-                            <span style="opacity: 0.9;"><i>Referente:</i> {c[2] or 'N/D'} | <i>Tel:</i> {c[3] or 'N/D'}</span><br>
-                            <span style="opacity: 0.8;"><i>Email:</i> {c[4] or 'N/D'} | <i>Indirizzo:</i> {c[5] or 'N/D'}</span>
-                        </div>
-                    """, unsafe_allow_html=True)
-                    
-                    c_b1, c_b2 = st.columns(2)
-                    with c_b1:
-                        if st.button("⚙️ Gestisci / Storico", key=f"apri_cli_{c[0]}"):
-                            st.session_state["cliente_attivo_id"] = c[0]
-                    with c_b2:
-                        if st.button("🗑️ Elimina", key=f"del_cli_{c[0]}"):
-                            conn = sqlite3.connect(DB_PATH)
-                            cursor = conn.cursor()
-                            cursor.execute("DELETE FROM clienti WHERE id = ?", (c[0],))
-                            conn.commit()
-                            conn.close()
-                            st.success("Cliente eliminato!")
-                            st.rerun()
-
-                if st.session_state.get("cliente_attivo_id") == c[0]:
-                    with st.container():
-                        st.markdown(f"""
-                            <div style="background-color: rgba(76, 175, 80, 0.15); padding: 15px; border-radius: 6px; border: 1px solid #4CAF50; margin-bottom: 10px;">
-                                <h4>Modifica Scheda: {c[1]}</h4>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        with st.form(f"form_mod_cli_{
