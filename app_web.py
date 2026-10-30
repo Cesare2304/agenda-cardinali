@@ -77,6 +77,15 @@ def inizializza_db():
             telefono TEXT
         )
     ''')
+    # Tabella per salvare il template di default del report
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS impostazioni_report (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            intestazione TEXT,
+            condizioni_standard TEXT,
+            note_pie_pagina TEXT
+        )
+    ''')
     
     for col, col_type in [("gruppo", "TEXT NOT NULL DEFAULT 'generale'"), ("telefono", "TEXT")]:
         try:
@@ -93,6 +102,12 @@ def inizializza_db():
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO utenti (username, password, gruppo, telefono) VALUES (?, ?, ?, ?)", ("admin", "admin123", "admin", ""))
         cursor.execute("INSERT INTO utenti (username, password, gruppo, telefono) VALUES (?, ?, ?, ?)", ("software", "soft123", "software", ""))
+
+    # Inizializza impostazioni report di default se vuote
+    cursor.execute("SELECT COUNT(*) FROM impostazioni_report")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO impostazioni_report (intestazione, condizioni_standard, note_pie_pagina) VALUES (?, ?, ?)", 
+                       ("Agenda Cardinali - Servizi Tecnici e Professionali", "Si certifica che i lavori sono stati eseguiti a regola d'arte. Salvo approvazione finale.", "Grazie per aver scelto i nostri servizi."))
         
     conn.commit()
     conn.close()
@@ -152,6 +167,14 @@ def get_gruppi_list():
     conn.close()
     return res if res else ["generale", "admin"]
 
+def get_template_report():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT intestazione, condizioni_standard, note_pie_pagina FROM impostazioni_report LIMIT 1")
+    res = cursor.fetchone()
+    conn.close()
+    return res if res else ("Agenda Cardinali", "Condizioni standard...", "Note piè di pagina...")
+
 if 'menu_selezionato' not in st.session_state:
     st.session_state.menu_selezionato = "📅 Planning Principale"
 
@@ -184,6 +207,8 @@ if st.sidebar.button("🛠️ Gestione Tecnici / Utenti", use_container_width=Tr
 if st.session_state.gruppo_corrente == "admin":
     if st.sidebar.button("🏢 Gestione Gruppi", use_container_width=True):
         st.session_state.menu_selezionato = "🏢 Gestione Gruppi"
+    if st.sidebar.button("⚙️ Configura Report", use_container_width=True):
+        st.session_state.menu_selezionato = "⚙️ Configura Report"
 
 st.sidebar.markdown("---")
 
@@ -419,7 +444,7 @@ if menu == "📅 Planning Principale":
                         nuova_riga = f"• [Inizio: {data_inz} {ora_inz} | Fine: {data_fin} {ora_fin}] {testo_lav}"
                         
                         if modalita == "Sovrascrivi tutto" or not r[10]:
-                            stringa_aggiornata = nueva_riga if 'nueva_riga' in locals() else nuova_riga
+                            stringa_aggiornata = nuova_riga
                         else:
                             stringa_aggiornata = r[10] + "\n" + nuova_riga
                             
@@ -435,28 +460,52 @@ if menu == "📅 Planning Principale":
                         st.session_state[f"open_interventi_{r[0]}"] = False
                         st.rerun()
 
+            # MODULO CHIUSURA E RAPPORTO DI INTERVENTO INTERATTIVO (POP-UP CON TEMPLATE DI DEFAULT)
             if st.session_state.get(f"open_chiusura_{r[0]}", False):
+                tpl_intestazione, tpl_condizioni, tpl_pie = get_template_report()
+
+                st.markdown(f"""
+                    <div style="background-color: rgba(33, 150, 243, 0.1); padding: 15px; border-radius: 8px; border: 1px solid #2196F3; margin-bottom: 10px;">
+                        <h4>📋 Rapporto di Intervento & Chiusura - #{r[0]}</h4>
+                        <p>Compilato automaticamente con il modello predefinito. Puoi personalizzarlo ulteriormente prima di confermare.</p>
+                    </div>
+                """, unsafe_allow_html=True)
+
                 with st.form(f"form_chiusura_{r[0]}"):
-                    st.subheader(f"Chiusura Intervento #{r[0]}")
-                    nota_fin = st.text_area("Nota finale di chiusura *")
+                    rep_intestazione = st.text_input("Intestazione Report", value=tpl_intestazione)
+                    rep_cliente = st.text_input("Cliente", value=r[4] or "")
+                    rep_titolo = st.text_input("Titolo Attività", value=r[3])
+                    rep_tecnico = st.text_input("Tecnico Assegnato", value=r[5] or "")
                     
+                    st.markdown("##### Dettaglio Lavorazioni ed Interventi Fatti:")
+                    rep_dettagli = st.text_area("Elenco Interventi registrati (Modificabili)", value=r[10] or "Nessun dettaglio inserito", height=120)
+                    
+                    rep_condizioni = st.text_area("Condizioni e Note Standard", value=tpl_condizioni, height=80)
+                    rep_nota = st.text_area("Nota finale di chiusura *", value="")
+                    rep_pie = st.text_input("Piè di pagina", value=tpl_pie)
+                    
+                    st.markdown("---")
+
                     c_c1, c_c2 = st.columns(2)
                     with c_c1:
-                        sub_chiudi = st.form_submit_button("Conferma e Archivia", use_container_width=True)
+                        sub_chiudi = st.form_submit_button("✔️ Conferma, Archivia e Genera Report", use_container_width=True)
                     with c_c2:
                         ann_chiudi = st.form_submit_button("❌ Annulla", use_container_width=True)
 
                     if sub_chiudi:
-                        if not nota_fin:
-                            st.warning("Inserisci una nota finale di chiusura.")
+                        if not rep_nota:
+                            st.warning("Inserisci una nota finale di chiusura obbligatoria.")
                         else:
+                            testo_rapporto_finale = f"=== {rep_intestazione} ===\nCliente: {rep_cliente}\nAttività: {rep_titolo}\nTecnico: {rep_tecnico}\n\nInterventi Eseguiti:\n{rep_dettagli}\n\nCondizioni:\n{rep_condizioni}\n\nNota Chiusura: {rep_nota}\n\n{rep_pie}"
+                            
                             conn = sqlite3.connect(DB_PATH)
                             cursor = conn.cursor()
-                            cursor.execute("UPDATE appuntamenti SET stato = 'Chiuso', nota_chiusura = ? WHERE id = ?", (nota_fin, r[0]))
+                            cursor.execute("UPDATE appuntamenti SET stato = 'Chiuso', nota_chiusura = ?, dettaglio_interventi = ? WHERE id = ?", (rep_nota, testo_rapporto_finale, r[0]))
                             conn.commit()
                             conn.close()
+                            
                             st.session_state[f"open_chiusura_{r[0]}"] = False
-                            st.success("Intervento chiuso e archiviato con successo!")
+                            st.success("Intervento chiuso, archiviato e report generato con successo!")
                             st.rerun()
                     if ann_chiudi:
                         st.session_state[f"open_chiusura_{r[0]}"] = False
@@ -912,6 +961,4 @@ elif menu == "🏢 Gestione Gruppi":
                         with c_gchiudi:
                             if st.form_submit_button("❌ Annulla"):
                                 st.session_state["edit_gruppo_id"] = None
-                                st.rerun()
-        else:
-            st.info("Nessun gruppo registrato.")
+                                st.rerun
