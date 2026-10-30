@@ -71,6 +71,12 @@ def inizializza_db():
         )
     ''')
     cursor.execute('''
+        CREATE TABLE IF NOT EXISTS gruppi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome_gruppo TEXT NOT NULL UNIQUE
+        )
+    ''')
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS utenti (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
@@ -78,6 +84,12 @@ def inizializza_db():
             gruppo TEXT NOT NULL
         )
     ''')
+    # Inserisce un gruppo e un utente admin di default se vuoti
+    cursor.execute("SELECT COUNT(*) FROM gruppi")
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO gruppi (nome_gruppo) VALUES ('admin')")
+        cursor.execute("INSERT INTO gruppi (nome_gruppo) VALUES ('software')")
+
     cursor.execute("SELECT COUNT(*) FROM utenti")
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO utenti (username, password, gruppo) VALUES (?, ?, ?)", ("admin", "admin123", "admin"))
@@ -96,7 +108,7 @@ if 'autenticato' not in st.session_state:
 if not st.session_state.autenticato:
     st.title(f"🔐 Accesso Riservato - {NOME_DITTA}")
     with st.form("form_login"):
-        username_input = st.text_input("Nome Utente / Gruppo")
+        username_input = st.text_input("Nome Utente")
         password_input = st.text_input("Password", type="password")
         submit_login = st.form_submit_button("Accedi al Gestionale")
         
@@ -133,6 +145,14 @@ def get_tecnici():
     conn.close()
     return res
 
+def get_gruppi_list():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT nome_gruppo FROM gruppi ORDER BY nome_gruppo ASC')
+    res = [r[0] for r in cursor.fetchall()]
+    conn.close()
+    return res if res else ["generale", "admin"]
+
 if 'menu_selezionato' not in st.session_state:
     st.session_state.menu_selezionato = "📅 Planning Principale"
 
@@ -162,8 +182,8 @@ if st.sidebar.button("🛠️ Gestione Tecnici", use_container_width=True):
     st.session_state.menu_selezionato = "🛠️ Gestione Tecnici"
 
 if st.session_state.gruppo_corrente == "admin":
-    if st.sidebar.button("🏢 Gestione Gruppi", use_container_width=True):
-        st.session_state.menu_selezionato = "🏢 Gestione Gruppi"
+    if st.sidebar.button("🏢 Gestione Gruppi e Utenti", use_container_width=True):
+        st.session_state.menu_selezionato = "🏢 Gestione Gruppi e Utenti"
 
 st.sidebar.markdown("---")
 
@@ -174,9 +194,10 @@ st.markdown(f"""
     <style>
     .planning-card {{
         font-size: {dim_testo}px !important;
-        padding: 12px;
+        padding: 10px 12px;
         border-radius: 6px;
         box-sizing: border-box;
+        height: 100%;
     }}
     .planning-card div {{
         font-size: {dim_testo}px !important;
@@ -187,8 +208,8 @@ st.markdown(f"""
     .stButton button {{
         width: 100%;
         border-radius: 4px;
-        padding: 6px 4px;
-        font-size: 13px;
+        padding: 6px 2px;
+        font-size: 12px;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -230,6 +251,10 @@ if menu == "📅 Planning Principale":
                 ora_app = st.text_input("Ora (es. 09:00)", "09:00")
                 scadenza_app = st.date_input("Data Scadenza")
                 
+                # Selezione del gruppo di competenza per l'intervento
+                gruppi_disponibili = get_gruppi_list()
+                gruppo_assegnato = st.selectbox("Gruppo di Competenza", gruppi_disponibili, index=gruppi_disponibili.index(st.session_state.gruppo_corrente) if st.session_state.gruppo_corrente in gruppi_disponibili else 0)
+                
             note = st.text_input("Note aggiuntive")
             salva_btn = st.form_submit_button("Salva Appuntamento")
             
@@ -242,7 +267,7 @@ if menu == "📅 Planning Principale":
                     cursor.execute('''
                         INSERT INTO appuntamenti (titolo, cliente, tecnico, telefono, categoria, urgenza, data, ora, scadenza, note, gruppo, stato)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Attivo')
-                    ''', (titolo, cliente, tecnico, telefono, categoria, urgenza, data_app.strftime('%Y-%m-%d'), ora_app, scadenza_app.strftime('%Y-%m-%d'), note, st.session_state.gruppo_corrente))
+                    ''', (titolo, cliente, tecnico, telefono, categoria, urgenza, data_app.strftime('%Y-%m-%d'), ora_app, scadenza_app.strftime('%Y-%m-%d'), note, gruppo_assegnato))
                     conn.commit()
                     conn.close()
                     st.success("Attività salvata con successo!")
@@ -259,9 +284,9 @@ if menu == "📅 Planning Principale":
         st.markdown("<br>", unsafe_allow_html=True)
         conn = sqlite3.connect(DB_PATH)
         if st.session_state.gruppo_corrente == "admin":
-            df_export = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, stato FROM appuntamenti WHERE stato = 'Attivo' OR stato IS NULL", conn)
+            df_export = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, gruppo, stato FROM appuntamenti WHERE stato = 'Attivo' OR stato IS NULL", conn)
         else:
-            df_export = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, stato FROM appuntamenti WHERE (stato = 'Attivo' OR stato IS NULL) AND gruppo = ?", conn, params=(st.session_state.gruppo_corrente,))
+            df_export = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, gruppo, stato FROM appuntamenti WHERE (stato = 'Attivo' OR stato IS NULL) AND gruppo = ?", conn, params=(st.session_state.gruppo_corrente,))
         conn.close()
         csv_data = df_export.to_csv(index=False).encode('utf-8')
         st.download_button(
@@ -323,8 +348,8 @@ if menu == "📅 Planning Principale":
             else:
                 bg_color, border_color, col_colore = "rgba(207, 216, 220, 0.15)", "#CFD8DC", "⚪"
 
-            # Colonne bilanciate con meno spazio tra i tasti a destra
-            col_card, col_b1, col_b2, col_b3, col_b4 = st.columns([5.5, 0.9, 0.9, 0.9, 0.9])
+            # Layout equilibrato: intervento largo (7) e 4 pulsanti ravvicinati sulla destra (1 ciascuno)
+            col_card, col_b1, col_b2, col_b3, col_b4 = st.columns([7, 1, 1, 1, 1])
             with col_card:
                 st.markdown(f"""
                     <div class="planning-card" style="background-color: {bg_color}; border-left: 6px solid {border_color};">
@@ -733,57 +758,98 @@ elif menu == "🛠️ Gestione Tecnici":
         else:
             st.info("Nessun tecnico registrato.")
 
-# ==================== SEZIONE 5: GESTIONE GRUPPI ====================
-elif menu == "🏢 Gestione Gruppi":
+# ==================== SEZIONE 5: GESTIONE GRUPPI E UTENTI ====================
+elif menu == "🏢 Gestione Gruppi e Utenti":
     st.title("🏢 Gestione Gruppi e Utenti di Accesso")
     
-    g_col1, g_col2 = st.columns([1, 1])
+    tab_gruppi, tab_utenti = st.tabs(["📁 Gestione Gruppi", "👥 Gestione Utenti"])
     
-    with g_col1:
-        st.subheader("➕ Crea Nuovo Utente / Gruppo")
-        with st.form("form_nuovo_utente", clear_on_submit=True):
-            nuovo_user = st.text_input("Nome Utente / Username *")
-            nuova_pass = st.text_input("Password *", type="password")
-            nuovo_gruppo = st.text_input("Nome Gruppo di Competenza * (es. software, amministrazione)")
+    with tab_gruppi:
+        col_g1, col_g2 = st.columns([1, 1])
+        with col_g1:
+            st.subheader("➕ Crea Nuovo Gruppo")
+            with st.form("form_nuovo_gruppo", clear_on_submit=True):
+                nome_nuovo_gruppo = st.text_input("Nome del Gruppo * (es. software, commerciale)")
+                if st.form_submit_button("Salva Gruppo"):
+                    if not nome_nuovo_gruppo:
+                        st.warning("Il nome del gruppo è obbligatorio.")
+                    else:
+                        try:
+                            conn = sqlite3.connect(DB_PATH)
+                            cursor = conn.cursor()
+                            cursor.execute("INSERT INTO gruppi (nome_gruppo) VALUES (?)", (nome_nuovo_gruppo.strip(),))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"Gruppo '{nome_nuovo_gruppo}' creato con successo!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Errore (gruppo probabilmente già esistente): {e}")
+        with col_g2:
+            st.subheader("📋 Gruppi Esistenti")
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, nome_gruppo FROM gruppi ORDER BY nome_gruppo ASC")
+            gruppi_attivi = cursor.fetchall()
+            conn.close()
             
-            if st.form_submit_button("Salva Utente e Gruppo"):
-                if not nuovo_user or not nuova_pass or not nuovo_gruppo:
-                    st.warning("Tutti i campi sono obbligatori.")
-                else:
-                    try:
-                        conn = sqlite3.connect(DB_PATH)
-                        cursor = conn.cursor()
-                        cursor.execute("INSERT INTO utenti (username, password, gruppo) VALUES (?, ?, ?)", (nuovo_user, nuova_pass, nuovo_gruppo))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"Gruppo '{nuovo_gruppo}' e utente '{nuovo_user}' creati con successo!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Errore (probabile username già esistente): {e}")
+            if gruppi_attivi:
+                for g in gruppi_attivi:
+                    st.markdown(f"""
+                        <div style="background-color: rgba(150, 150, 150, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 6px;">
+                            📁 <b>Gruppo:</b> <code>{g[1]}</code>
+                        </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("Nessun gruppo registrato.")
 
-    with g_col2:
-        st.subheader("📋 Elenco Gruppi e Utenti Attivi")
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, username, gruppo FROM utenti ORDER BY gruppo ASC")
-        utenti_data = cursor.fetchall()
-        conn.close()
-        
-        if utenti_data:
-            for u in utenti_data:
-                st.markdown(f"""
-                    <div style="background-color: rgba(150, 150, 150, 0.1); padding: 10px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 8px;">
-                        👤 <b>Utente:</b> {u[1]} &nbsp;|&nbsp; 🏢 <b>Gruppo:</b> <code>{u[2]}</code>
-                    </div>
-                """, unsafe_allow_html=True)
-                if u[1] != "admin":
-                    if st.button("🗑️ Elimina Utente", key=f"del_user_{u[0]}"):
-                        conn = sqlite3.connect(DB_PATH)
-                        cursor = conn.cursor()
-                        cursor.execute("DELETE FROM utenti WHERE id = ?", (u[0],))
-                        conn.commit()
-                        conn.close()
-                        st.success("Utente eliminato!")
-                        st.rerun()
-        else:
-            st.info("Nessun utente registrato oltre all'amministratore.")
+    with tab_utenti:
+        col_u1, col_u2 = st.columns([1, 1])
+        with col_u1:
+            st.subheader("➕ Crea Nuovo Utente e Assegna Gruppo")
+            with st.form("form_nuovo_utente", clear_on_submit=True):
+                nuovo_user = st.text_input("Nome Utente / Username *")
+                nuova_pass = st.text_input("Password *", type="password")
+                
+                lista_g = get_gruppi_list()
+                gruppo_assegnato_utente = st.selectbox("Seleziona Gruppo di Appartenenza *", lista_g)
+                
+                if st.form_submit_button("Salva Utente"):
+                    if not nuovo_user or not nuova_pass or not gruppo_assegnato_utente:
+                        st.warning("Tutti i campi sono obbligatori.")
+                    else:
+                        try:
+                            conn = sqlite3.connect(DB_PATH)
+                            cursor = conn.cursor()
+                            cursor.execute("INSERT INTO utenti (username, password, gruppo) VALUES (?, ?, ?)", (nuovo_user.strip(), nuova_pass, gruppo_assegnato_utente))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"Utente '{nuovo_user}' creato e associato al gruppo '{gruppo_assegnato_utente}' con successo!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Errore (username probabilmente già esistente): {e}")
+        with col_u2:
+            st.subheader("📋 Elenco Utenti Registrati")
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, username, gruppo FROM utenti ORDER BY gruppo ASC")
+            utenti_data = cursor.fetchall()
+            conn.close()
+            
+            if utenti_data:
+                for u in utenti_data:
+                    st.markdown(f"""
+                        <div style="background-color: rgba(150, 150, 150, 0.1); padding: 10px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 8px;">
+                            👤 <b>Utente:</b> {u[1]} &nbsp;|&nbsp; 🏢 <b>Gruppo:</b> <code>{u[2]}</code>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    if u[1] != "admin":
+                        if st.button("🗑️ Elimina Utente", key=f"del_user_{u[0]}"):
+                            conn = sqlite3.connect(DB_PATH)
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM utenti WHERE id = ?", (u[0],))
+                            conn.commit()
+                            conn.close()
+                            st.success("Utente eliminato!")
+                            st.rerun()
+            else:
+                st.info("Nessun utente registrato.")
