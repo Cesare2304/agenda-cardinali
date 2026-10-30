@@ -155,7 +155,7 @@ def get_gruppi_list():
 if 'menu_selezionato' not in st.session_state:
     st.session_state.menu_selezionato = "📅 Planning Principale"
 
-# ==================== MENU LATERALE COMPATTO ====================
+# ==================== MENU LATERALE ULTRA COMPATTO ====================
 st.sidebar.title(f"📅 {NOME_DITTA}")
 st.sidebar.markdown(f"👤 Utente: **{st.session_state.utente_corrente}** (*{st.session_state.gruppo_corrente}*)")
 if st.sidebar.button("🚪 Logout", use_container_width=True):
@@ -192,13 +192,16 @@ dim_titoli = st.sidebar.slider("Dimensione Titoli (px)", min_value=20, max_value
 
 st.markdown(f"""
     <style>
-    /* Riduzione spazi verticali e margini nella sidebar */
-    [data-testid="stSidebar"] {{
-        padding-top: 0rem;
+    /* Rimozione spazi e margini aggressivi nel menu di sinistra di Streamlit */
+    [data-testid="stSidebar"] div.block-container {{
+        padding-top: 0.5rem !important;
+        padding-bottom: 0.5rem !important;
     }}
-    [data-testid="stSidebar"] .block-container {{
-        padding-top: 1rem;
-        padding-bottom: 1rem;
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
+        gap: 0.2rem !important;
+    }}
+    [data-testid="stSidebar"] hr {{
+        margin: 0.4rem 0 !important;
     }}
     .planning-card {{
         font-size: {dim_testo}px !important;
@@ -364,7 +367,7 @@ if menu == "📅 Planning Principale":
                         <div><b>{col_colore} Data:</b> {r[1]} alle {r[2]} &nbsp;|&nbsp; <b>Titolo:</b> {r[3]} &nbsp;|&nbsp; <b>Cliente:</b> {r[4]} &nbsp;|&nbsp; <b>Gruppo:</b> <i>{r[12]}</i></div>
                         <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} &nbsp;|&nbsp; <b>Urgenza:</b> {r[7]} &nbsp;|&nbsp; <b>Scadenza:</b> {r[8]}</div>
                         <div style="margin-top: 4px; opacity: 0.8; font-style: italic;">Note: {r[9]}</div>
-                        <div style="margin-top: 4px; color: #1976D2;"><b>Interventi fatti:</b> {r[10] or 'Nessun dettaglio inserito'}</div>
+                        <div style="margin-top: 4px; color: #1976D2;"><b>Interventi fatti:</b><br>{r[10].replace('\n', '<br>') if r[10] else 'Nessun dettaglio inserito'}</div>
                     </div>
                 """, unsafe_allow_html=True)
             
@@ -383,25 +386,39 @@ if menu == "📅 Planning Principale":
                     conn.close()
                     st.rerun()
 
+            # Sezione per gestire i singoli interventi con Inizio e Fine
             if st.session_state.get(f"open_interventi_{r[0]}", False):
                 with st.form(f"form_int_fatti_{r[0]}"):
                     st.subheader(f"Gestione Interventi Fatti - #{r[0]}")
-                    nuovo_intervento_testo = st.text_area("Aggiungi intervento fatto / lavorazione", value=r[10] or "")
-                    c_d1, c_d2 = st.columns(2)
-                    with c_d1:
-                        data_intervento_fatto = st.date_input("Data Intervento Fatto", value=datetime.date.today())
-                    with c_d2:
-                        ora_intervento_fatto = st.text_input("Ora Intervento Fatto", value="09:00")
+                    st.markdown("Inserisci i dettagli del singolo intervento con data e ora di inizio e fine:")
                     
-                    if st.form_submit_button("Salva Dettaglio Interventi"):
-                        stringa_aggiornata = f"[{data_intervento_fatto} {ora_intervento_fatto}] {nuovo_intervento_testo}"
+                    col_i1, col_i2, col_i3 = st.columns(3)
+                    with col_i1:
+                        data_inz = st.date_input("Data Inizio", value=datetime.date.today(), key=f"dinz_{r[0]}")
+                        ora_inz = st.text_input("Ora Inizio (es. 08:30)", value="08:30", key=f"oinz_{r[0]}")
+                    with col_i2:
+                        data_fin = st.date_input("Data Fine", value=datetime.date.today(), key=f"dfin_{r[0]}")
+                        ora_fin = st.text_input("Ora Fine (es. 12:30)", value="12:30", key=f"ofin_{r[0]}")
+                    with col_i3:
+                        modalita = st.selectbox("Azione", ["Aggiungi nuovo intervento", "Sovrascrivi tutto"], key=f"mod_int_{r[0]}")
+                    
+                    testo_lav = st.text_area("Descrizione della lavorazione eseguita", key=f"tlav_{r[0]}")
+                    
+                    if st.form_submit_button("Salva Intervento"):
+                        nuova_riga = f"• [Inizio: {data_inz} {ora_inz} | Fine: {data_fin} {ora_fin}] {testo_lav}"
+                        
+                        if modalita == "Sovrascrivi tutto" or not r[10]:
+                            stringa_aggiornata = nuova_riga
+                        else:
+                            stringa_aggiornata = r[10] + "\n" + nuova_riga
+                            
                         conn = sqlite3.connect(DB_PATH)
                         cursor = conn.cursor()
                         cursor.execute("UPDATE appuntamenti SET dettaglio_interventi = ? WHERE id = ?", (stringa_aggiornata, r[0]))
                         conn.commit()
                         conn.close()
                         st.session_state[f"open_interventi_{r[0]}"] = False
-                        st.success("Interventi salvati!")
+                        st.success("Intervento registrato con successo!")
                         st.rerun()
 
             if st.session_state.get(f"open_chiusura_{r[0]}", False):
@@ -821,7 +838,7 @@ elif menu == "🏢 Gestione Gruppi e Utenti":
                                     st.success("Gruppo eliminato!")
                                     st.rerun()
                             else:
-                                st.caption(" protetto")
+                                st.caption("Protetto")
 
                     if st.session_state.get("edit_gruppo_id") == g[0]:
                         with st.form(f"form_mod_grp_{g[0]}"):
