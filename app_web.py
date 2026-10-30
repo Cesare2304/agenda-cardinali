@@ -155,7 +155,7 @@ def get_gruppi_list():
 if 'menu_selezionato' not in st.session_state:
     st.session_state.menu_selezionato = "📅 Planning Principale"
 
-# ==================== MENU LATERALE A BOTTONI PULITO ====================
+# ==================== MENU LATERALE COMPATTO ====================
 st.sidebar.title(f"📅 {NOME_DITTA}")
 st.sidebar.markdown(f"👤 Utente: **{st.session_state.utente_corrente}** (*{st.session_state.gruppo_corrente}*)")
 if st.sidebar.button("🚪 Logout", use_container_width=True):
@@ -192,6 +192,14 @@ dim_titoli = st.sidebar.slider("Dimensione Titoli (px)", min_value=20, max_value
 
 st.markdown(f"""
     <style>
+    /* Riduzione spazi verticali e margini nella sidebar */
+    [data-testid="stSidebar"] {{
+        padding-top: 0rem;
+    }}
+    [data-testid="stSidebar"] .block-container {{
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }}
     .planning-card {{
         font-size: {dim_testo}px !important;
         padding: 10px 12px;
@@ -209,9 +217,9 @@ st.markdown(f"""
     .stButton button {{
         width: 100%;
         border-radius: 4px;
-        padding: 4px 2px;
+        padding: 2px 2px;
         font-size: 12px;
-        margin-bottom: 2px;
+        margin-bottom: 1px;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -531,7 +539,7 @@ elif menu == "👥 Gestione Clienti":
                 
             if st.form_submit_button("Salva Cliente"):
                 if not cli_nome:
-                    st.warning(" Il nome azienda è obbligatorio.")
+                    st.warning("Il nome azienda è obbligatorio.")
                 else:
                     conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
@@ -791,11 +799,56 @@ elif menu == "🏢 Gestione Gruppi e Utenti":
             
             if gruppi_attivi:
                 for g in gruppi_attivi:
-                    st.markdown(f"""
-                        <div style="background-color: rgba(150, 150, 150, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 6px;">
-                            📁 <b>Gruppo:</b> <code>{g[1]}</code>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    with st.container():
+                        st.markdown(f"""
+                            <div style="background-color: rgba(150, 150, 150, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 6px;">
+                                📁 <b>Gruppo:</b> <code>{g[1]}</code>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        cg_b1, cg_b2 = st.columns(2)
+                        with cg_b1:
+                            if st.button("✏️ Modifica", key=f"mod_grp_{g[0]}"):
+                                st.session_state["edit_gruppo_id"] = g[0]
+                        with cg_b2:
+                            if g[1] not in ["admin", "generale"]:
+                                if st.button("🗑️ Elimina", key=f"del_grp_{g[0]}"):
+                                    conn = sqlite3.connect(DB_PATH)
+                                    cursor = conn.cursor()
+                                    cursor.execute("DELETE FROM gruppi WHERE id = ?", (g[0],))
+                                    conn.commit()
+                                    conn.close()
+                                    st.success("Gruppo eliminato!")
+                                    st.rerun()
+                            else:
+                                st.caption(" protetto")
+
+                    if st.session_state.get("edit_gruppo_id") == g[0]:
+                        with st.form(f"form_mod_grp_{g[0]}"):
+                            st.markdown(f"#### Modifica Gruppo: {g[1]}")
+                            m_nome_gruppo = st.text_input("Nome Gruppo", value=g[1])
+                            
+                            c_gsalva, c_gchiudi = st.columns(2)
+                            with c_gsalva:
+                                if st.form_submit_button("💾 Salva Modifiche"):
+                                    if not m_nome_gruppo:
+                                        st.warning("Il nome del gruppo non può essere vuoto.")
+                                    else:
+                                        try:
+                                            conn = sqlite3.connect(DB_PATH)
+                                            cursor = conn.cursor()
+                                            cursor.execute("UPDATE gruppi SET nome_gruppo = ? WHERE id = ?", (m_nome_gruppo.strip(), g[0]))
+                                            conn.commit()
+                                            conn.close()
+                                            st.session_state["edit_gruppo_id"] = None
+                                            st.success("Gruppo aggiornato!")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Errore: {e}")
+                            with c_gchiudi:
+                                if st.form_submit_button("❌ Annulla"):
+                                    st.session_state["edit_gruppo_id"] = None
+                                    st.rerun()
             else:
                 st.info("Nessun gruppo registrato.")
 
@@ -855,6 +908,8 @@ elif menu == "🏢 Gestione Gruppi e Utenti":
                                     conn.close()
                                     st.success("Utente eliminato!")
                                     st.rerun()
+                            else:
+                                st.caption("Protetto (Impossibile eliminare admin)")
 
                     if st.session_state.get("edit_user_id") == u[0]:
                         with st.form(f"form_mod_user_{u[0]}"):
