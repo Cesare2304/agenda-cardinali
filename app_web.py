@@ -3,6 +3,13 @@ import datetime
 import os
 import streamlit as st
 import pandas as pd
+from io import BytesIO
+
+# Importazioni per ReportLab (PDF Design)
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 st.set_page_config(
     page_title="Agenda Cardinali",
@@ -77,7 +84,6 @@ def inizializza_db():
             telefono TEXT
         )
     ''')
-    # Tabella per salvare il template di default del report
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS impostazioni_report (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,7 +109,6 @@ def inizializza_db():
         cursor.execute("INSERT INTO utenti (username, password, gruppo, telefono) VALUES (?, ?, ?, ?)", ("admin", "admin123", "admin", ""))
         cursor.execute("INSERT INTO utenti (username, password, gruppo, telefono) VALUES (?, ?, ?, ?)", ("software", "soft123", "software", ""))
 
-    # Inizializza impostazioni report di default se vuote
     cursor.execute("SELECT COUNT(*) FROM impostazioni_report")
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO impostazioni_report (intestazione, condizioni_standard, note_pie_pagina) VALUES (?, ?, ?)", 
@@ -175,6 +180,68 @@ def get_template_report():
     conn.close()
     return res if res else ("Agenda Cardinali", "Condizioni standard...", "Note piè di pagina...")
 
+# Funzione per generare il PDF grafico con ReportLab
+def genera_pdf_report(intestazione, cliente, titolo, tecnico, dettagli, condizioni, nota_chiusura, pie):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    elements = []
+    
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#1976D2'), spaceAfter=10)
+    normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#333333'), spaceAfter=6)
+    bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=colors.HexColor('#111111'))
+    
+    # Intestazione
+    elements.append(Paragraph(f"<b>{intestazione}</b>", title_style))
+    elements.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#1976D2'), spaceAfter=15))
+    
+    # Dati Generali in Tabella
+    data_info = [
+        [Paragraph(f"<b>Cliente:</b> {cliente}", normal_style), Paragraph(f"<b>Data Report:</b> {datetime.date.today()}", normal_style)],
+        [Paragraph(f"<b>Attività:</b> {titolo}", normal_style), Paragraph(f"<b>Tecnico:</b> {tecnico}", normal_style)]
+    ]
+    t_info = Table(data_info, colWidths=[270, 270])
+    t_info.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F5F5F5')),
+        ('PADDING', (0,0), (-1,-1), 8),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    elements.append(t_info)
+    elements.append(Spacer(1, 15))
+    
+    # Dettagli Interventi
+    elements.append(Paragraph("<b>Dettaglio Interventi e Lavorazioni Eseguite:</b>", bold_style))
+    elements.append(Spacer(1, 5))
+    elements.append(Paragraph(dettagli.replace('\n', '<br/>'), normal_style))
+    elements.append(Spacer(1, 15))
+    
+    # Condizioni e Nota Chiusura
+    elements.append(Paragraph("<b>Note di Chiusura e Condizioni:</b>", bold_style))
+    elements.append(Paragraph(f"<b>Nota Finale:</b> {nota_chiusura}", normal_style))
+    elements.append(Paragraph(f"<i>{condizioni}</i>", normal_style))
+    elements.append(Spacer(1, 30))
+    
+    # Sezione Firme
+    data_firme = [
+        [Paragraph("<b>Firma Tecnico</b>", normal_style), Paragraph("<b>Firma per Accettazione Cliente</b>", normal_style)],
+        [Paragraph("<br/><br/>___________________________", normal_style), Paragraph("<br/><br/>___________________________", normal_style)]
+    ]
+    t_firme = Table(data_firme, colWidths=[270, 270])
+    t_firme.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('PADDING', (0,0), (-1,-1), 5),
+    ]))
+    elements.append(t_firme)
+    
+    elements.append(Spacer(1, 40))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CCCCCC'), spaceAfter=5))
+    elements.append(Paragraph(f"<font size=8 color='#777777'>{pie}</font>", normal_style))
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
 if 'menu_selezionato' not in st.session_state:
     st.session_state.menu_selezionato = "📅 Planning Principale"
 
@@ -188,12 +255,10 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("---")
-
 if st.sidebar.button("🔄 Aggiorna / Sincronizza", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("---")
-
 st.sidebar.subheader("📌 Navigazione")
 if st.sidebar.button("📅 Planning Principale", use_container_width=True):
     st.session_state.menu_selezionato = "📅 Planning Principale"
@@ -204,50 +269,24 @@ if st.sidebar.button("👥 Gestione Clienti", use_container_width=True):
 if st.sidebar.button("🛠️ Gestione Tecnici / Utenti", use_container_width=True):
     st.session_state.menu_selezionato = "🛠️ Gestione Tecnici / Utenti"
 
-if st.session_state.gruppo_corrente == "admin":
-    if st.sidebar.button("🏢 Gestione Gruppi", use_container_width=True):
-        st.session_state.menu_selezionato = "🏢 Gestione Gruppi"
-    if st.sidebar.button("⚙️ Configura Report", use_container_width=True):
-        st.session_state.menu_selezionato = "⚙️ Configura Report"
+if st.sidebar.button("🏢 Gestione Gruppi", use_container_width=True):
+    st.session_state.menu_selezionato = "🏢 Gestione Gruppi"
+if st.sidebar.button("⚙️ Configura Report", use_container_width=True):
+    st.session_state.menu_selezionato = "⚙️ Configura Report"
 
 st.sidebar.markdown("---")
-
 dim_testo = st.sidebar.slider("Dimensione testo Planning (px)", min_value=12, max_value=30, value=16)
 dim_titoli = st.sidebar.slider("Dimensione Titoli (px)", min_value=20, max_value=50, value=32)
 
 st.markdown(f"""
     <style>
-    [data-testid="stSidebar"] div.block-container {{
-        padding-top: 0.5rem !important;
-        padding-bottom: 0.5rem !important;
-    }}
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
-        gap: 0.2rem !important;
-    }}
-    [data-testid="stSidebar"] hr {{
-        margin: 0.3rem 0 !important;
-    }}
-    .planning-card {{
-        font-size: {dim_testo}px !important;
-        padding: 10px 12px;
-        border-radius: 6px;
-        box-sizing: border-box;
-        height: 100%;
-        width: 100%;
-    }}
-    .planning-card div {{
-        font-size: {dim_testo}px !important;
-    }}
-    h1 {{
-        font-size: {dim_titoli}px !important;
-    }}
-    .stButton button {{
-        width: 100%;
-        border-radius: 4px;
-        padding: 2px 2px;
-        font-size: 12px;
-        margin-bottom: 1px;
-    }}
+    [data-testid="stSidebar"] div.block-container {{ padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }}
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{ gap: 0.2rem !important; }}
+    [data-testid="stSidebar"] hr {{ margin: 0.3rem 0 !important; }}
+    .planning-card {{ font-size: {dim_testo}px !important; padding: 10px 12px; border-radius: 6px; box-sizing: border-box; width: 100%; }}
+    .planning-card div {{ font-size: {dim_testo}px !important; }}
+    h1 {{ font-size: {dim_titoli}px !important; }}
+    .stButton button {{ width: 100%; border-radius: 4px; padding: 2px 2px; font-size: 12px; margin-bottom: 1px; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -460,25 +499,25 @@ if menu == "📅 Planning Principale":
                         st.session_state[f"open_interventi_{r[0]}"] = False
                         st.rerun()
 
-            # MODULO CHIUSURA E RAPPORTO DI INTERVENTO INTERATTIVO (POP-UP CON TEMPLATE DI DEFAULT)
+            # MODULO CHIUSURA E REPORT DESIGN PDF INTERATTIVO
             if st.session_state.get(f"open_chiusura_{r[0]}", False):
                 tpl_intestazione, tpl_condizioni, tpl_pie = get_template_report()
 
                 st.markdown(f"""
                     <div style="background-color: rgba(33, 150, 243, 0.1); padding: 15px; border-radius: 8px; border: 1px solid #2196F3; margin-bottom: 10px;">
-                        <h4>📋 Rapporto di Intervento & Chiusura - #{r[0]}</h4>
-                        <p>Compilato automaticamente con il modello predefinito. Puoi personalizzarlo ulteriormente prima di confermare.</p>
+                        <h4>🎨 Editor Report di Design & Chiusura - #{r[0]}</h4>
+                        <p>Modifica liberamente tutti i campi sottostanti. Potrai scaricare il PDF grafico ufficiale prima di archiviare.</p>
                     </div>
                 """, unsafe_allow_html=True)
 
                 with st.form(f"form_chiusura_{r[0]}"):
-                    rep_intestazione = st.text_input("Intestazione Report", value=tpl_intestazione)
+                    rep_intestazione = st.text_input("Intestazione Aziendale", value=tpl_intestazione)
                     rep_cliente = st.text_input("Cliente", value=r[4] or "")
                     rep_titolo = st.text_input("Titolo Attività", value=r[3])
                     rep_tecnico = st.text_input("Tecnico Assegnato", value=r[5] or "")
                     
-                    st.markdown("##### Dettaglio Lavorazioni ed Interventi Fatti:")
-                    rep_dettagli = st.text_area("Elenco Interventi registrati (Modificabili)", value=r[10] or "Nessun dettaglio inserito", height=120)
+                    st.markdown("##### Dettaglio Lavorazioni (Editabile per il PDF):")
+                    rep_dettagli = st.text_area("Elenco Interventi", value=r[10] or "Nessun dettaglio inserito", height=120)
                     
                     rep_condizioni = st.text_area("Condizioni e Note Standard", value=tpl_condizioni, height=80)
                     rep_nota = st.text_area("Nota finale di chiusura *", value="")
@@ -488,7 +527,7 @@ if menu == "📅 Planning Principale":
 
                     c_c1, c_c2 = st.columns(2)
                     with c_c1:
-                        sub_chiudi = st.form_submit_button("✔️ Conferma, Archivia e Genera Report", use_container_width=True)
+                        sub_chiudi = st.form_submit_button("✔️ Conferma, Archivia e Genera PDF", use_container_width=True)
                     with c_c2:
                         ann_chiudi = st.form_submit_button("❌ Annulla", use_container_width=True)
 
@@ -504,12 +543,26 @@ if menu == "📅 Planning Principale":
                             conn.commit()
                             conn.close()
                             
+                            # Generazione del file PDF effettivo
+                            pdf_buffer = genera_pdf_report(rep_intestazione, rep_cliente, rep_titolo, rep_tecnico, rep_dettagli, rep_condizioni, rep_nota, rep_pie)
+                            st.session_state[f"pdf_data_{r[0]}"] = pdf_buffer.getvalue()
+                            
                             st.session_state[f"open_chiusura_{r[0]}"] = False
-                            st.success("Intervento chiuso, archiviato e report generato con successo!")
+                            st.success("Intervento chiuso e archiviato con successo!")
                             st.rerun()
                     if ann_chiudi:
                         st.session_state[f"open_chiusura_{r[0]}"] = False
                         st.rerun()
+
+                # Pulsante di download PDF se appena generato
+                if f"pdf_data_{r[0]}" in st.session_state:
+                    st.download_button(
+                        label=f"📥 Scarica PDF Ufficiale Intervento #{r[0]}",
+                        data=st.session_state[f"pdf_data_{r[0]}"],
+                        file_name=f"Rapporto_Intervento_{r[0]}_{r[4]}.pdf",
+                        mime="application/pdf",
+                        key=f"dl_pdf_{r[0]}"
+                    )
 
             if st.session_state.get(f"edit_app_{r[0]}", False):
                 with st.form(f"form_mod_app_{r[0]}"):
@@ -608,14 +661,29 @@ elif menu == "📁 Archivio Storico":
                     <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} | <b>Nota Chiusura:</b> {r[11]}</div>
                 </div>
             """, unsafe_allow_html=True)
-            if st.button("🔄 Riattiva Intervento", key=f"riattiva_{r[0]}"):
-                conn = sqlite3.connect(DB_PATH)
-                cursor = conn.cursor()
-                cursor.execute("UPDATE appuntamenti SET stato = 'Attivo' WHERE id = ?", (r[0],))
-                conn.commit()
-                conn.close()
-                st.success("Intervento rimesso nel planning attivo!")
-                st.rerun()
+            
+            c_arc1, c_arc2 = st.columns(2)
+            with c_arc1:
+                if st.button("🔄 Riattiva Intervento", key=f"riattiva_{r[0]}"):
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE appuntamenti SET stato = 'Attivo' WHERE id = ?", (r[0],))
+                    conn.commit()
+                    conn.close()
+                    st.success("Intervento rimesso nel planning attivo!")
+                    st.rerun()
+            with c_arc2:
+                # Pulsante per rigenerare il PDF al volo dall'archivio
+                if st.button("📄 Ristampa PDF", key=f"pdf_arch_{r[0]}"):
+                    tpl_i, tpl_c, tpl_pie = get_template_report()
+                    pdf_buf = genera_pdf_report(tpl_i, r[4], r[3], r[5], r[10] or "", tpl_c, r[11] or "", tpl_pie)
+                    st.download_button(
+                        label=f"📥 Scarica PDF #{r[0]}",
+                        data=pdf_buf.getvalue(),
+                        file_name=f"Rapporto_Intervento_{r[0]}.pdf",
+                        mime="application/pdf",
+                        key=f"dl_arch_pdf_{r[0]}"
+                    )
             st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
     else:
         st.info("L'archivio storico è vuoto.")
@@ -968,7 +1036,7 @@ elif menu == "🏢 Gestione Gruppi":
 # ==================== SEZIONE 6: CONFIGURA REPORT (DEFAULT) ====================
 elif menu == "⚙️ Configura Report":
     st.title("⚙️ Editor Modello / Report di Default")
-    st.markdown("Qui puoi impostare i testi, le condizioni standard e le intestazioni che compariranno automaticamente ogni volta che generi un rapporto di intervento.")
+    st.markdown("Qui puoi impostare i testi, le condizioni standard e le intestazioni che compariranno automaticamente ogni volta che chiudi un intervento e generi il PDF.")
 
     tpl_i, tpl_c, tpl_p = get_template_report()
 
