@@ -78,7 +78,6 @@ def inizializza_db():
         )
     ''')
     
-    # Aggiornamento sicuro colonne per la tabella utenti se il DB esisteva già
     for col, col_type in [("gruppo", "TEXT NOT NULL DEFAULT 'generale'"), ("telefono", "TEXT")]:
         try:
             cursor.execute(f"ALTER TABLE utenti ADD COLUMN {col} {col_type}")
@@ -100,7 +99,6 @@ def inizializza_db():
 
 inizializza_db()
 
-# Gestione Autenticazione Utenti / Gruppi
 if 'autenticato' not in st.session_state:
     st.session_state.autenticato = False
     st.session_state.utente_corrente = None
@@ -269,7 +267,12 @@ if menu == "📅 Planning Principale":
                 gruppo_assegnato = st.selectbox("Gruppo / Mansione di Competenza", gruppi_disponibili, index=gruppi_disponibili.index(st.session_state.gruppo_corrente) if st.session_state.gruppo_corrente in gruppi_disponibili else 0)
                 
             note = st.text_input("Note aggiuntive")
-            salva_btn = st.form_submit_button("Salva Appuntamento")
+            
+            c_sub1, c_sub2 = st.columns(2)
+            with c_sub1:
+                salva_btn = st.form_submit_button("Salva Appuntamento", use_container_width=True)
+            with c_sub2:
+                annulla_btn = st.form_submit_button("❌ Annulla / Torna Indietro", use_container_width=True)
             
             if salva_btn:
                 if not titolo:
@@ -285,6 +288,9 @@ if menu == "📅 Planning Principale":
                     conn.close()
                     st.success("Attività salvata con successo!")
                     st.rerun()
+            if annulla_btn:
+                st.info("Operazione annullata.")
+                st.rerun()
 
     st.divider()
     
@@ -403,11 +409,17 @@ if menu == "📅 Planning Principale":
                     
                     testo_lav = st.text_area("Descrizione della lavorazione eseguita", key=f"tlav_{r[0]}")
                     
-                    if st.form_submit_button("Salva Intervento"):
+                    c_s1, c_s2 = st.columns(2)
+                    with c_s1:
+                        sub_int = st.form_submit_button("Salva Intervento", use_container_width=True)
+                    with c_s2:
+                        ann_int = st.form_submit_button("❌ Annulla", use_container_width=True)
+                        
+                    if sub_int:
                         nuova_riga = f"• [Inizio: {data_inz} {ora_inz} | Fine: {data_fin} {ora_fin}] {testo_lav}"
                         
                         if modalita == "Sovrascrivi tutto" or not r[10]:
-                            stringa_aggiornata = nuova_riga
+                            stringa_aggiornata = nueva_riga if 'nueva_riga' in locals() else nuova_riga
                         else:
                             stringa_aggiornata = r[10] + "\n" + nuova_riga
                             
@@ -419,12 +431,22 @@ if menu == "📅 Planning Principale":
                         st.session_state[f"open_interventi_{r[0]}"] = False
                         st.success("Intervento salvato!")
                         st.rerun()
+                    if ann_int:
+                        st.session_state[f"open_interventi_{r[0]}"] = False
+                        st.rerun()
 
             if st.session_state.get(f"open_chiusura_{r[0]}", False):
                 with st.form(f"form_chiusura_{r[0]}"):
                     st.subheader(f"Chiusura Intervento #{r[0]}")
                     nota_fin = st.text_area("Nota finale di chiusura *")
-                    if st.form_submit_button("Conferma e Archivia"):
+                    
+                    c_c1, c_c2 = st.columns(2)
+                    with c_c1:
+                        sub_chiudi = st.form_submit_button("Conferma e Archivia", use_container_width=True)
+                    with c_c2:
+                        ann_chiudi = st.form_submit_button("❌ Annulla", use_container_width=True)
+
+                    if sub_chiudi:
                         if not nota_fin:
                             st.warning("Inserisci una nota finale di chiusura.")
                         else:
@@ -436,6 +458,9 @@ if menu == "📅 Planning Principale":
                             st.session_state[f"open_chiusura_{r[0]}"] = False
                             st.success("Intervento chiuso e archiviato con successo!")
                             st.rerun()
+                    if ann_chiudi:
+                        st.session_state[f"open_chiusura_{r[0]}"] = False
+                        st.rerun()
 
             if st.session_state.get(f"edit_app_{r[0]}", False):
                 with st.form(f"form_mod_app_{r[0]}"):
@@ -460,7 +485,13 @@ if menu == "📅 Planning Principale":
                     new_urg = st.selectbox("Urgenza", urg_list, index=urg_list.index(r[7]) if r[7] in urg_list else 1)
                     new_note = st.text_input("Note", value=r[9])
                     
-                    if st.form_submit_button("Salva Modifiche"):
+                    c_m1, c_m2 = st.columns(2)
+                    with c_m1:
+                        sub_mod = st.form_submit_button("Salva Modifiche", use_container_width=True)
+                    with c_m2:
+                        ann_mod = st.form_submit_button("❌ Annulla", use_container_width=True)
+
+                    if sub_mod:
                         conn = sqlite3.connect(DB_PATH)
                         cursor = conn.cursor()
                         cursor.execute("UPDATE appuntamenti SET titolo=?, cliente=?, tecnico=?, urgenza=?, note=? WHERE id=?",
@@ -469,6 +500,9 @@ if menu == "📅 Planning Principale":
                         conn.close()
                         st.session_state[f"edit_app_{r[0]}"] = False
                         st.success("Modifiche salvate!")
+                        st.rerun()
+                    if ann_mod:
+                        st.session_state[f"edit_app_{r[0]}"] = False
                         st.rerun()
 
             st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
@@ -553,7 +587,13 @@ elif menu == "👥 Gestione Clienti":
             cli_ind = st.text_input("Indirizzo")
             cli_note = st.text_input("Note")
                 
-            if st.form_submit_button("Salva Cliente"):
+            c_cl1, c_cl2 = st.columns(2)
+            with c_cl1:
+                sub_cli = st.form_submit_button("Salva Cliente", use_container_width=True)
+            with c_cl2:
+                ann_cli = st.form_submit_button("❌ Annulla", use_container_width=True)
+
+            if sub_cli:
                 if not cli_nome:
                     st.warning("Il nome azienda è obbligatorio.")
                 else:
@@ -565,6 +605,9 @@ elif menu == "👥 Gestione Clienti":
                     conn.close()
                     st.success("Cliente registrato con successo!")
                     st.rerun()
+            if ann_cli:
+                st.info("Operazione annullata.")
+                st.rerun()
 
     with col_lista:
         c_h1, c_h2 = st.columns([2, 1])
@@ -642,7 +685,7 @@ elif menu == "👥 Gestione Clienti":
                                     st.success("Aggiornato!")
                                     st.rerun()
                             with col_chiudi:
-                                if st.form_submit_button("❌ Chiudi Scheda"):
+                                if st.form_submit_button("❌ Annulla / Chiudi"):
                                     st.session_state["cliente_attivo_id"] = None
                                     st.rerun()
 
@@ -679,7 +722,13 @@ elif menu == "🛠️ Gestione Tecnici / Utenti":
             gruppo_assegnato_utente = st.selectbox("Mansione / Gruppo *", lista_g)
             tel_user = st.text_input("Telefono")
             
-            if st.form_submit_button("Salva Utente"):
+            c_u1, c_u2 = st.columns(2)
+            with c_u1:
+                sub_user = st.form_submit_button("Salva Utente", use_container_width=True)
+            with c_u2:
+                ann_user = st.form_submit_button("❌ Annulla", use_container_width=True)
+
+            if sub_user:
                 if not nuovo_user or not nuova_pass:
                     st.warning("Nome utente e password sono obbligatori.")
                 else:
@@ -693,6 +742,9 @@ elif menu == "🛠️ Gestione Tecnici / Utenti":
                         st.rerun()
                     except Exception as e:
                         st.error(f"Errore (username probabilmente già esistente): {e}")
+            if ann_user:
+                st.info("Operazione annullata.")
+                st.rerun()
 
     with col_u2:
         st.subheader("📋 Elenco Utenti Registrati")
@@ -776,7 +828,14 @@ elif menu == "🏢 Gestione Gruppi":
         st.subheader("➕ Crea Nuovo Gruppo / Mansione")
         with st.form("form_nuovo_gruppo", clear_on_submit=True):
             nome_nuovo_gruppo = st.text_input("Nome del Gruppo * (es. elettricista, termoidraulico)")
-            if st.form_submit_button("Salva Gruppo"):
+            
+            c_g1, c_g2 = st.columns(2)
+            with c_g1:
+                sub_g = st.form_submit_button("Salva Gruppo", use_container_width=True)
+            with c_g2:
+                ann_g = st.form_submit_button("❌ Annulla", use_container_width=True)
+
+            if sub_g:
                 if not nome_nuovo_gruppo:
                     st.warning("Il nome del gruppo è obbligatorio.")
                 else:
@@ -790,6 +849,10 @@ elif menu == "🏢 Gestione Gruppi":
                         st.rerun()
                     except Exception as e:
                         st.error(f"Errore: {e}")
+            if ann_g:
+                st.info("Operazione annullata.")
+                st.rerun()
+
     with col_g2:
         st.subheader("📋 Gruppi Esistenti")
         conn = sqlite3.connect(DB_PATH)
