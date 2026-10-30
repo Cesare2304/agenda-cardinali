@@ -208,8 +208,9 @@ st.markdown(f"""
     .stButton button {{
         width: 100%;
         border-radius: 4px;
-        padding: 6px 2px;
+        padding: 4px 2px;
         font-size: 12px;
+        margin-bottom: 2px;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -347,7 +348,8 @@ if menu == "📅 Planning Principale":
             else:
                 bg_color, border_color, col_colore = "rgba(207, 216, 220, 0.15)", "#CFD8DC", "⚪"
 
-            col_card, col_b1, col_b2, col_b3, col_b4 = st.columns([8, 1, 1, 1, 1])
+            # Layout: Card grande a sinistra (10) e colonna stretta verticale con i 4 tasti a destra (1.5)
+            col_card, col_buttons = st.columns([10, 1.5])
             with col_card:
                 st.markdown(f"""
                     <div class="planning-card" style="background-color: {bg_color}; border-left: 6px solid {border_color};">
@@ -358,16 +360,13 @@ if menu == "📅 Planning Principale":
                     </div>
                 """, unsafe_allow_html=True)
             
-            with col_b1:
+            with col_buttons:
                 if st.button("🛠️ Interventi", key=f"int_{r[0]}", use_container_width=True):
                     st.session_state[f"open_interventi_{r[0]}"] = not st.session_state.get(f"open_interventi_{r[0]}", False)
-            with col_b2:
                 if st.button("✔️ Chiudi", key=f"chiudi_{r[0]}", use_container_width=True):
                     st.session_state[f"open_chiusura_{r[0]}"] = True
-            with col_b3:
                 if st.button("✏️ Modifica", key=f"mod_{r[0]}", use_container_width=True):
                     st.session_state[f"edit_app_{r[0]}"] = True
-            with col_b4:
                 if st.button("🗑️ Elimina", key=f"del_{r[0]}", use_container_width=True):
                     conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
@@ -636,3 +635,18 @@ elif menu == "👥 Gestione Clienti":
                                 st.markdown(f"- **{ac[0]} ({ac[1]})** | *Titolo:* **{ac[2]}** | *Tecnico:* {ac[3]} | *Urgenza:* {ac[4]} | *Stato:* {stato_colore}")
                         else:
                             st.info("Nessun intervento registrato per questo cliente.")
+        else:
+            st.info("Nessun cliente registrato.")
+
+# ==================== SEZIONE 4: TECNICI ====================
+elif menu == "🛠️ Gestione Tecnici":
+    st.title("🛠️ Gestione e Anagrafica Tecnici")
+    
+    col_t_ins, col_t_lista = st.columns([1, 1])
+    
+    with col_t_ins:
+        st.subheader("➕ Inserisci Nuovo Tecnico")
+        with st.form("form_tecnico", clear_on_submit=True):
+            tec_nome = st.text_input("Nome Tecnico *")
+            tec_spec = st.text_input("Specializzazione")
+            tec_tel = st.text_input("Telefono")
