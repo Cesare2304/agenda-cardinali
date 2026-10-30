@@ -78,13 +78,11 @@ def inizializza_db():
         )
     ''')
     
-    # Inizializzazione Gruppi di default
     cursor.execute("SELECT COUNT(*) FROM gruppi")
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO gruppi (nome_gruppo) VALUES ('admin')")
         cursor.execute("INSERT INTO gruppi (nome_gruppo) VALUES ('software')")
 
-    # Inizializzazione Utenti di default
     cursor.execute("SELECT COUNT(*) FROM utenti")
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO utenti (username, password, gruppo, telefono) VALUES (?, ?, ?, ?)", ("admin", "admin123", "admin", ""))
@@ -95,7 +93,6 @@ def inizializza_db():
 
 inizializza_db()
 
-# Gestione Autenticazione Utenti / Gruppi
 if 'autenticato' not in st.session_state:
     st.session_state.autenticato = False
     st.session_state.utente_corrente = None
@@ -369,4 +366,481 @@ if menu == "📅 Planning Principale":
             
             with col_buttons:
                 if st.button("🛠️ Interventi", key=f"int_{r[0]}", use_container_width=True):
-                    st.session_state[f"open_interventi_{r[0]}"] = not st.session_state.get(f"open_interventi_{r[0]}
+                    st.session_state[f"open_interventi_{r[0]}"] = not st.session_state.get(f"open_interventi_{r[0]}", False)
+                if st.button("✔️ Chiudi", key=f"chiudi_{r[0]}", use_container_width=True):
+                    st.session_state[f"open_chiusura_{r[0]}"] = True
+                if st.button("✏️ Modifica", key=f"mod_{r[0]}", use_container_width=True):
+                    st.session_state[f"edit_app_{r[0]}"] = True
+                if st.button("🗑️ Elimina", key=f"del_{r[0]}", use_container_width=True):
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM appuntamenti WHERE id = ?", (r[0],))
+                    conn.commit()
+                    conn.close()
+                    st.rerun()
+
+            if st.session_state.get(f"open_interventi_{r[0]}", False):
+                with st.form(f"form_int_fatti_{r[0]}"):
+                    st.subheader(f"Gestione Interventi Fatti - #{r[0]}")
+                    
+                    col_i1, col_i2, col_i3 = st.columns(3)
+                    with col_i1:
+                        data_inz = st.date_input("Data Inizio", value=datetime.date.today(), key=f"dinz_{r[0]}")
+                        ora_inz = st.text_input("Ora Inizio", value="08:30", key=f"oinz_{r[0]}")
+                    with col_i2:
+                        data_fin = st.date_input("Data Fine", value=datetime.date.today(), key=f"dfin_{r[0]}")
+                        ora_fin = st.text_input("Ora Fine", value="12:30", key=f"ofin_{r[0]}")
+                    with col_i3:
+                        modalita = st.selectbox("Azione", ["Aggiungi nuovo intervento", "Sovrascrivi tutto"], key=f"mod_int_{r[0]}")
+                    
+                    testo_lav = st.text_area("Descrizione della lavorazione eseguita", key=f"tlav_{r[0]}")
+                    
+                    if st.form_submit_button("Salva Intervento"):
+                        nuova_riga = f"• [Inizio: {data_inz} {ora_inz} | Fine: {data_fin} {ora_fin}] {testo_lav}"
+                        
+                        if modalita == "Sovrascrivi tutto" or not r[10]:
+                            stringa_aggiornata = nuova_riga
+                        else:
+                            stringa_aggiornata = r[10] + "\n" + nuova_riga
+                            
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE appuntamenti SET dettaglio_interventi = ? WHERE id = ?", (stringa_aggiornata, r[0]))
+                        conn.commit()
+                        conn.close()
+                        st.session_state[f"open_interventi_{r[0]}"] = False
+                        st.success("Intervento salvato!")
+                        st.rerun()
+
+            if st.session_state.get(f"open_chiusura_{r[0]}", False):
+                with st.form(f"form_chiusura_{r[0]}"):
+                    st.subheader(f"Chiusura Intervento #{r[0]}")
+                    nota_fin = st.text_area("Nota finale di chiusura *")
+                    if st.form_submit_button("Conferma e Archivia"):
+                        if not nota_fin:
+                            st.warning("Inserisci una nota finale di chiusura.")
+                        else:
+                            conn = sqlite3.connect(DB_PATH)
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE appuntamenti SET stato = 'Chiuso', nota_chiusura = ? WHERE id = ?", (nota_fin, r[0]))
+                            conn.commit()
+                            conn.close()
+                            st.session_state[f"open_chiusura_{r[0]}"] = False
+                            st.success("Intervento chiuso e archiviato con successo!")
+                            st.rerun()
+
+            if st.session_state.get(f"edit_app_{r[0]}", False):
+                with st.form(f"form_mod_app_{r[0]}"):
+                    st.subheader(f"Modifica Intervento #{r[0]}")
+                    new_titolo = st.text_input("Titolo", value=r[3])
+                    
+                    c_list = get_clienti()
+                    try:
+                        c_idx = c_list.index(r[4]) if r[4] in c_list else 0
+                    except:
+                        c_idx = 0
+                    new_cliente = st.selectbox("Cliente", c_list if c_list else [""], index=c_idx)
+                    
+                    t_list = get_tecnici()
+                    try:
+                        t_idx = t_list.index(r[5]) if r[5] in t_list else 0
+                    except:
+                        t_idx = 0
+                    new_tecnico = st.selectbox("Tecnico", t_list if t_list else [""], index=t_idx)
+                    
+                    urg_list = ["Urgente", "Normale", "Meno urgente"]
+                    new_urg = st.selectbox("Urgenza", urg_list, index=urg_list.index(r[7]) if r[7] in urg_list else 1)
+                    new_note = st.text_input("Note", value=r[9])
+                    
+                    if st.form_submit_button("Salva Modifiche"):
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE appuntamenti SET titolo=?, cliente=?, tecnico=?, urgenza=?, note=? WHERE id=?",
+                                       (new_titolo, new_cliente, new_tecnico, new_urg, new_note, r[0]))
+                        conn.commit()
+                        conn.close()
+                        st.session_state[f"edit_app_{r[0]}"] = False
+                        st.success("Modifiche salvate!")
+                        st.rerun()
+
+            st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
+    else:
+        st.info("Nessuna attività attiva trovata.")
+
+# ==================== SEZIONE 2: ARCHIVIO STORICO ====================
+elif menu == "📁 Archivio Storico":
+    st.title("📁 Archivio Storico Interventi")
+    
+    arc_h1, arc_h2 = st.columns([4, 1])
+    with arc_h1:
+        ricerca_arc = st.text_input("🔍 Cerca nell'archivio storico")
+    with arc_h2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        conn = sqlite3.connect(DB_PATH)
+        if st.session_state.gruppo_corrente == "admin":
+            df_archivio = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, stato FROM appuntamenti WHERE stato = 'Chiuso'", conn)
+        else:
+            df_archivio = pd.read_sql_query("SELECT titolo, cliente, tecnico, categoria, urgenza, data, ora, scadenza, note, dettaglio_interventi, nota_chiusura, stato FROM appuntamenti WHERE stato = 'Chiuso' AND gruppo = ?", conn, params=(st.session_state.gruppo_corrente,))
+        conn.close()
+        csv_archivio = df_archivio.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📊 Esporta Storico",
+            data=csv_archivio,
+            file_name="archivio_interventi_agenda.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    if st.session_state.gruppo_corrente == "admin":
+        q = "SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura FROM appuntamenti WHERE stato = 'Chiuso'"
+        params = []
+    else:
+        q = "SELECT id, data, ora, titolo, cliente, tecnico, categoria, urgenza, scadenza, note, dettaglio_interventi, nota_chiusura FROM appuntamenti WHERE stato = 'Chiuso' AND gruppo = ?"
+        params = [st.session_state.gruppo_corrente]
+
+    if ricerca_arc:
+        q += " AND (titolo LIKE ? OR cliente LIKE ?)"
+        p = f"%{ricerca_arc}%"
+        params.extend([p, p])
+    q += " ORDER BY data DESC"
+    cursor.execute(q, params)
+    rows_arc = cursor.fetchall()
+    conn.close()
+    
+    if rows_arc:
+        for r in rows_arc:
+            st.markdown(f"""
+                <div style="background-color: rgba(120, 144, 156, 0.15); border-left: 6px solid #78909C; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+                    <div><b>Cliente:</b> {r[4]} | <b>Titolo:</b> {r[3]} | <b>Data:</b> {r[1]} - {r[2]}</div>
+                    <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} | <b>Nota Chiusura:</b> {r[11]}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            if st.button("🔄 Riattiva Intervento", key=f"riattiva_{r[0]}"):
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("UPDATE appuntamenti SET stato = 'Attivo' WHERE id = ?", (r[0],))
+                conn.commit()
+                conn.close()
+                st.success("Intervento rimesso nel planning attivo!")
+                st.rerun()
+            st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
+    else:
+        st.info("L'archivio storico è vuoto.")
+
+# ==================== SEZIONE 3: CLIENTI ====================
+elif menu == "👥 Gestione Clienti":
+    st.title("👥 Gestione e Anagrafica Clienti")
+    
+    col_ins, col_lista = st.columns([1, 1])
+    
+    with col_ins:
+        st.subheader("➕ Registra Nuovo Cliente")
+        with st.form("form_cliente", clear_on_submit=True):
+            cli_nome = st.text_input("Nome Azienda *")
+            cli_ref = st.text_input("Referente")
+            cli_tel = st.text_input("Telefono")
+            cli_email = st.text_input("Email")
+            cli_ind = st.text_input("Indirizzo")
+            cli_note = st.text_input("Note")
+                
+            if st.form_submit_button("Salva Cliente"):
+                if not cli_nome:
+                    st.warning("Il nome azienda è obbligatorio.")
+                else:
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute('INSERT INTO clienti (nome_azienda, referente, telefono, email, indirizzo, note) VALUES (?, ?, ?, ?, ?, ?)',
+                                   (cli_nome, cli_ref, cli_tel, cli_email, cli_ind, cli_note))
+                    conn.commit()
+                    conn.close()
+                    st.success("Cliente registrato con successo!")
+                    st.rerun()
+
+    with col_lista:
+        c_h1, c_h2 = st.columns([2, 1])
+        with c_h1:
+            st.subheader("📋 Elenco Clienti Registrati")
+        with c_h2:
+            conn = sqlite3.connect(DB_PATH)
+            df_clienti = pd.read_sql_query("SELECT nome_azienda, referente, telefono, email, indirizzo, note FROM clienti", conn)
+            conn.close()
+            csv_clienti = df_clienti.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📊 Esporta Clienti",
+                data=csv_clienti,
+                file_name="clienti_agenda.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, nome_azienda, referente, telefono, email, indirizzo, note FROM clienti ORDER BY nome_azienda ASC")
+        clienti_data = cursor.fetchall()
+        conn.close()
+        
+        if clienti_data:
+            for c in clienti_data:
+                with st.container():
+                    st.markdown(f"""
+                        <div style="background-color: rgba(150, 150, 150, 0.1); padding: 10px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 8px;">
+                            🏢 <b>{c[1]}</b><br>
+                            <span style="opacity: 0.9;"><i>Referente:</i> {c[2] or 'N/D'} | <i>Tel:</i> {c[3] or 'N/D'}</span><br>
+                            <span style="opacity: 0.8;"><i>Email:</i> {c[4] or 'N/D'} | <i>Indirizzo:</i> {c[5] or 'N/D'}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    c_b1, c_b2 = st.columns(2)
+                    with c_b1:
+                        if st.button("⚙️ Gestisci / Storico", key=f"apri_cli_{c[0]}"):
+                            st.session_state["cliente_attivo_id"] = c[0]
+                    with c_b2:
+                        if st.button("🗑️ Elimina", key=f"del_cli_{c[0]}"):
+                            conn = sqlite3.connect(DB_PATH)
+                            cursor = conn.cursor()
+                            cursor.execute("DELETE FROM clienti WHERE id = ?", (c[0],))
+                            conn.commit()
+                            conn.close()
+                            st.success("Cliente eliminato!")
+                            st.rerun()
+
+                if st.session_state.get("cliente_attivo_id") == c[0]:
+                    with st.container():
+                        st.markdown(f"""
+                            <div style="background-color: rgba(76, 175, 80, 0.15); padding: 15px; border-radius: 6px; border: 1px solid #4CAF50; margin-bottom: 10px;">
+                                <h4>Modifica Scheda: {c[1]}</h4>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        with st.form(f"form_mod_cli_{c[0]}"):
+                            m_nome = st.text_input("Nome Azienda", value=c[1])
+                            m_ref = st.text_input("Referente", value=c[2] or "")
+                            m_tel = st.text_input("Telefono", value=c[3] or "")
+                            m_email = st.text_input("Email", value=c[4] or "")
+                            m_ind = st.text_input("Indirizzo", value=c[5] or "")
+                            m_note = st.text_input("Note", value=c[6] or "")
+                            
+                            col_salva, col_chiudi = st.columns(2)
+                            with col_salva:
+                                if st.form_submit_button("💾 Salva Modifiche"):
+                                    conn = sqlite3.connect(DB_PATH)
+                                    cursor = conn.cursor()
+                                    cursor.execute("UPDATE clienti SET nome_azienda=?, referente=?, telefono=?, email=?, indirizzo=?, note=? WHERE id=?",
+                                                   (m_nome, m_ref, m_tel, m_email, m_ind, m_note, c[0]))
+                                    conn.commit()
+                                    conn.close()
+                                    st.success("Aggiornato!")
+                                    st.rerun()
+                            with col_chiudi:
+                                if st.form_submit_button("❌ Chiudi Scheda"):
+                                    st.session_state["cliente_attivo_id"] = None
+                                    st.rerun()
+
+                        st.markdown("##### 📂 Interventi collegati a questo cliente:")
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT data, ora, titolo, tecnico, urgenza, stato FROM appuntamenti WHERE cliente = ? ORDER BY data DESC", (c[1],))
+                        app_cliente = cursor.fetchall()
+                        conn.close()
+                        
+                        if app_cliente:
+                            for ac in app_cliente:
+                                stato_colore = "🟢 Attivo" if ac[5] == "Attivo" else "📁 Chiuso"
+                                st.markdown(f"- **{ac[0]} ({ac[1]})** | *Titolo:* **{ac[2]}** | *Tecnico:* {ac[3]} | *Urgenza:* {ac[4]} | *Stato:* {stato_colore}")
+                        else:
+                            st.info("Nessun intervento registrato per questo cliente.")
+        else:
+            st.info("Nessun cliente registrato.")
+
+# ==================== SEZIONE 4: UTENTI / TECNICI ====================
+elif menu == "🛠️ Gestione Tecnici / Utenti":
+    st.title("🛠️ Gestione Utenti e Mansioni (Tecnici)")
+    st.markdown("La mansione del tecnico è determinata direttamente dal **Gruppo** di appartenenza.")
+    
+    col_u1, col_u2 = st.columns([1, 1])
+    
+    with col_u1:
+        st.subheader("➕ Registra Nuovo Utente")
+        with st.form("form_nuovo_utente", clear_on_submit=True):
+            nuovo_user = st.text_input("Nome Utente / Tecnico *")
+            nuova_pass = st.text_input("Password *", type="password")
+            
+            lista_g = get_gruppi_list()
+            gruppo_assegnato_utente = st.selectbox("Mansione / Gruppo *", lista_g)
+            tel_user = st.text_input("Telefono")
+            
+            if st.form_submit_button("Salva Utente"):
+                if not nuovo_user or not nuova_pass:
+                    st.warning("Nome utente e password sono obbligatori.")
+                else:
+                    try:
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO utenti (username, password, gruppo, telefono) VALUES (?, ?, ?, ?)", (nuovo_user.strip(), nuova_pass, gruppo_assegnato_utente, tel_user))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Utente '{nuovo_user}' salvato con successo!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore (username probabilmente già esistente): {e}")
+
+    with col_u2:
+        st.subheader("📋 Elenco Utenti Registrati")
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, password, gruppo, telefono FROM utenti ORDER BY gruppo ASC")
+        utenti_data = cursor.fetchall()
+        conn.close()
+        
+        if utenti_data:
+            for u in utenti_data:
+                with st.container():
+                    st.markdown(f"""
+                        <div style="background-color: rgba(150, 150, 150, 0.1); padding: 10px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 8px;">
+                            👤 <b>Utente:</b> {u[1]} &nbsp;|&nbsp; 🏢 <b>Mansione/Gruppo:</b> <code>{u[3]}</code><br>
+                            <span style="opacity: 0.9;"><i>Tel:</i> {u[4] or 'N/D'}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    col_ub1, col_ub2 = st.columns(2)
+                    with col_ub1:
+                        if st.button("✏️ Modifica", key=f"mod_user_{u[0]}"):
+                            st.session_state["edit_user_id"] = u[0]
+                    with col_ub2:
+                        if u[1] != "admin":
+                            if st.button("🗑️ Elimina", key=f"del_user_{u[0]}"):
+                                conn = sqlite3.connect(DB_PATH)
+                                cursor = conn.cursor()
+                                cursor.execute("DELETE FROM utenti WHERE id = ?", (u[0],))
+                                conn.commit()
+                                conn.close()
+                                st.success("Utente eliminato!")
+                                st.rerun()
+                        else:
+                            st.caption("Protetto (Impossibile eliminare admin)")
+
+                if st.session_state.get("edit_user_id") == u[0]:
+                    with st.form(f"form_mod_user_{u[0]}"):
+                        st.markdown(f"#### Modifica Utente: {u[1]}")
+                        if u[1] == "admin":
+                            st.info("Per l'utente admin è consentita solo la modifica della password e del telefono.")
+                            m_user = u[1]
+                            m_gruppo = u[3]
+                            m_pass = st.text_input("Nuova Password Admin", value=u[2])
+                        else:
+                            m_user = st.text_input("Username", value=u[1])
+                            m_pass = st.text_input("Password", value=u[2])
+                            g_list = get_gruppi_list()
+                            try:
+                                g_idx = g_list.index(u[3]) if u[3] in g_list else 0
+                            except:
+                                g_idx = 0
+                            m_gruppo = st.selectbox("Mansione / Gruppo", g_list, index=g_idx)
+                        
+                        m_tel = st.text_input("Telefono", value=u[4] or "")
+
+                        c_ms, c_mc = st.columns(2)
+                        with c_ms:
+                            if st.form_submit_button("💾 Salva Modifiche"):
+                                conn = sqlite3.connect(DB_PATH)
+                                cursor = conn.cursor()
+                                cursor.execute("UPDATE utenti SET username = ?, password = ?, gruppo = ?, telefono = ? WHERE id = ?", (m_user, m_pass, m_gruppo, m_tel, u[0]))
+                                conn.commit()
+                                conn.close()
+                                st.session_state["edit_user_id"] = None
+                                st.success("Aggiornato!")
+                                st.rerun()
+                        with c_mc:
+                            if st.form_submit_button("❌ Annulla"):
+                                st.session_state["edit_user_id"] = None
+                                st.rerun()
+        else:
+            st.info("Nessun utente registrato.")
+
+# ==================== SEZIONE 5: GESTIONE GRUPPI ====================
+elif menu == "🏢 Gestione Gruppi":
+    st.title("🏢 Gestione Gruppi e Mansioni")
+    
+    col_g1, col_g2 = st.columns([1, 1])
+    with col_g1:
+        st.subheader("➕ Crea Nuovo Gruppo / Mansione")
+        with st.form("form_nuovo_gruppo", clear_on_submit=True):
+            nome_nuovo_gruppo = st.text_input("Nome del Gruppo * (es. elettricista, termoidraulico)")
+            if st.form_submit_button("Salva Gruppo"):
+                if not nome_nuovo_gruppo:
+                    st.warning("Il nome del gruppo è obbligatorio.")
+                else:
+                    try:
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO gruppi (nome_gruppo) VALUES (?)", (nome_nuovo_gruppo.strip(),))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Gruppo '{nome_nuovo_gruppo}' creato con successo!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore: {e}")
+    with col_g2:
+        st.subheader("📋 Gruppi Esistenti")
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, nome_gruppo FROM gruppi ORDER BY nome_gruppo ASC")
+        gruppi_attivi = cursor.fetchall()
+        conn.close()
+        
+        if gruppi_attivi:
+            for g in gruppi_attivi:
+                with st.container():
+                    st.markdown(f"""
+                        <div style="background-color: rgba(150, 150, 150, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(150, 150, 150, 0.2); margin-bottom: 6px;">
+                            📁 <b>Gruppo/Mansione:</b> <code>{g[1]}</code>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    cg_b1, cg_b2 = st.columns(2)
+                    with cg_b1:
+                        if st.button("✏️ Modifica", key=f"mod_grp_{g[0]}"):
+                            st.session_state["edit_gruppo_id"] = g[0]
+                    with cg_b2:
+                        if g[1] not in ["admin", "generale"]:
+                            if st.button("🗑️ Elimina", key=f"del_grp_{g[0]}"):
+                                conn = sqlite3.connect(DB_PATH)
+                                cursor = conn.cursor()
+                                cursor.execute("DELETE FROM gruppi WHERE id = ?", (g[0],))
+                                conn.commit()
+                                conn.close()
+                                st.success("Gruppo eliminato!")
+                                st.rerun()
+                        else:
+                            st.caption("Protetto")
+
+                if st.session_state.get("edit_gruppo_id") == g[0]:
+                    with st.form(f"form_mod_grp_{g[0]}"):
+                        st.markdown(f"#### Modifica Gruppo: {g[1]}")
+                        m_nome_gruppo = st.text_input("Nome Gruppo", value=g[1])
+                        
+                        c_gsalva, c_gchiudi = st.columns(2)
+                        with c_gsalva:
+                            if st.form_submit_button("💾 Salva Modifiche"):
+                                if not m_nome_gruppo:
+                                    st.warning("Il nome del gruppo non può essere vuoto.")
+                                else:
+                                    try:
+                                        conn = sqlite3.connect(DB_PATH)
+                                        cursor = conn.cursor()
+                                        cursor.execute("UPDATE gruppi SET nome_gruppo = ? WHERE id = ?", (m_nome_gruppo.strip(), g[0]))
+                                        conn.commit()
+                                        conn.close()
+                                        st.session_state["edit_gruppo_id"] = None
+                                        st.success("Gruppo aggiornato!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Errore: {e}")
+                        with c_gchiudi:
+                            if st.form_submit_button("❌ Annulla"):
+                                st.session_state["edit_gruppo_id"] = None
+                                st.rerun()
+        else:
+            st.info("Nessun gruppo registrato.")
