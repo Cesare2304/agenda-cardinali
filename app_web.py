@@ -961,4 +961,38 @@ elif menu == "🏢 Gestione Gruppi":
                         with c_gchiudi:
                             if st.form_submit_button("❌ Annulla"):
                                 st.session_state["edit_gruppo_id"] = None
-                                st.rerun
+                                st.rerun()
+        else:
+            st.info("Nessun gruppo registrato.")
+
+# ==================== SEZIONE 6: CONFIGURA REPORT (DEFAULT) ====================
+elif menu == "⚙️ Configura Report":
+    st.title("⚙️ Editor Modello / Report di Default")
+    st.markdown("Qui puoi impostare i testi, le condizioni standard e le intestazioni che compariranno automaticamente ogni volta che generi un rapporto di intervento.")
+
+    tpl_i, tpl_c, tpl_p = get_template_report()
+
+    with st.form("form_config_report"):
+        nuova_intestazione = st.text_input("Intestazione Aziendale / Titolo Report", value=tpl_i)
+        nuove_condizioni = st.text_area("Condizioni Generali / Note Legali Standard", value=tpl_c, height=120)
+        nuovo_pie = st.text_input("Testo Piè di Pagina Standard", value=tpl_p)
+
+        c_r1, c_r2 = st.columns(2)
+        with c_r1:
+            salva_tpl = st.form_submit_button("💾 Salva Modello di Default", use_container_width=True)
+        with c_r2:
+            annulla_tpl = st.form_submit_button("❌ Annulla", use_container_width=True)
+
+        if salva_tpl:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM impostazioni_report")
+            cursor.execute("INSERT INTO impostazioni_report (intestazione, condizioni_standard, note_pie_pagina) VALUES (?, ?, ?)", 
+                           (nuova_intestazione, nuove_condizioni, nuovo_pie))
+            conn.commit()
+            conn.close()
+            st.success("Modello di report predefinito aggiornato con successo!")
+            st.rerun()
+        if annulla_tpl:
+            st.info("Operazione annullata.")
+            st.rerun()
