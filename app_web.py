@@ -161,7 +161,6 @@ if st.sidebar.button("👥 Gestione Clienti", use_container_width=True):
 if st.sidebar.button("🛠️ Gestione Tecnici", use_container_width=True):
     st.session_state.menu_selezionato = "🛠️ Gestione Tecnici"
 
-# Sezione dedicata ai gruppi (visibile per tutti o riservata all'admin)
 if st.session_state.gruppo_corrente == "admin":
     if st.sidebar.button("🏢 Gestione Gruppi", use_container_width=True):
         st.session_state.menu_selezionato = "🏢 Gestione Gruppi"
@@ -171,15 +170,12 @@ st.sidebar.markdown("---")
 dim_testo = st.sidebar.slider("Dimensione testo Planning (px)", min_value=12, max_value=30, value=16)
 dim_titoli = st.sidebar.slider("Dimensione Titoli (px)", min_value=20, max_value=50, value=32)
 
-# CSS personalizzato per allineare card e pulsanti con altezza omogenea
 st.markdown(f"""
     <style>
     .planning-card {{
         font-size: {dim_testo}px !important;
         padding: 12px;
         border-radius: 6px;
-        margin-bottom: 0px;
-        height: 100%;
         box-sizing: border-box;
     }}
     .planning-card div {{
@@ -188,12 +184,11 @@ st.markdown(f"""
     h1 {{
         font-size: {dim_titoli}px !important;
     }}
-    /* Omogeneizza i pulsanti laterali */
     .stButton button {{
         width: 100%;
         border-radius: 4px;
-        padding: 6px 10px;
-        font-size: 14px;
+        padding: 6px 4px;
+        font-size: 13px;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -328,11 +323,12 @@ if menu == "📅 Planning Principale":
             else:
                 bg_color, border_color, col_colore = "rgba(207, 216, 220, 0.15)", "#CFD8DC", "⚪"
 
-            col_card, col_b1, col_b2, col_b3, col_b4 = st.columns([4, 1, 1, 1, 1])
+            # Colonne bilanciate con meno spazio tra i tasti a destra
+            col_card, col_b1, col_b2, col_b3, col_b4 = st.columns([5.5, 0.9, 0.9, 0.9, 0.9])
             with col_card:
                 st.markdown(f"""
                     <div class="planning-card" style="background-color: {bg_color}; border-left: 6px solid {border_color};">
-                        <div><b>{col_colore} Cliente:</b> {r[4]} &nbsp;|&nbsp; <b>Titolo:</b> {r[3]} &nbsp;|&nbsp; <b>Data:</b> {r[1]} alle {r[2]} &nbsp;|&nbsp; <b>Gruppo:</b> <i>{r[12]}</i></div>
+                        <div><b>{col_colore} Data:</b> {r[1]} alle {r[2]} &nbsp;|&nbsp; <b>Titolo:</b> {r[3]} &nbsp;|&nbsp; <b>Cliente:</b> {r[4]} &nbsp;|&nbsp; <b>Gruppo:</b> <i>{r[12]}</i></div>
                         <div style="margin-top: 4px; opacity: 0.9;"><b>Tecnico:</b> {r[5]} &nbsp;|&nbsp; <b>Urgenza:</b> {r[7]} &nbsp;|&nbsp; <b>Scadenza:</b> {r[8]}</div>
                         <div style="margin-top: 4px; opacity: 0.8; font-style: italic;">Note: {r[9]}</div>
                         <div style="margin-top: 4px; color: #1976D2;"><b>Interventi fatti:</b> {r[10] or 'Nessun dettaglio inserito'}</div>
@@ -716,8 +712,6 @@ elif menu == "🛠️ Gestione Tecnici":
                                     conn.close()
                                     st.success("Aggiornato!")
                                     st.rerun()
-                            with col_tsalva:
-                                pass
                             with col_tchiudi:
                                 if st.form_submit_button("❌ Chiudi Scheda"):
                                     st.session_state["tecnico_attivo_id"] = None
