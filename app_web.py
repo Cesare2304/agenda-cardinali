@@ -100,7 +100,7 @@ def inizializza_db():
         )
     ''')
     
-    # Tabella Impostazioni Report (C1 Report Designer Studio)
+    # Tabella Impostazioni Report
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS impostazioni_report (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -201,20 +201,22 @@ def get_gruppi_list():
     return res if res else ["generale", "admin"]
 
 def get_template_report():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT titolo_report, font_family, font_size, colore_primario, 
-               mostra_header, mostra_dettagli, mostra_materiali, mostra_garanzia, 
-               mostra_firme, testo_garanzia, testo_pie 
-        FROM impostazioni_report LIMIT 1
-    """)
-    res = cursor.fetchone()
-    conn.close()
-    if res:
-        return res
-    else:
-        return ("RAPPORTO DI INTERVENTO", "Helvetica", 10, "#1976D2", 1, 1, 1, 1, 1, "Garanzia standard...", "Piè di pagina...")
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT titolo_report, font_family, font_size, colore_primario, 
+                   mostra_header, mostra_dettagli, mostra_materiali, mostra_garanzia, 
+                   mostra_firme, testo_garanzia, testo_pie 
+            FROM impostazioni_report LIMIT 1
+        """)
+        res = cursor.fetchone()
+        conn.close()
+        if res:
+            return res
+    except Exception:
+        pass
+    return ("RAPPORTO DI INTERVENTO", "Helvetica", 10, "#1976D2", 1, 1, 1, 1, 1, "Garanzia standard...", "Piè di pagina...")
 
 # Generatore PDF Avanzato: preleva i dati automaticamente dall'anagrafica cliente
 def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
@@ -236,7 +238,6 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=font_sz, textColor=colors.HexColor('#333333'), spaceAfter=6)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=font_sz, fontName='Helvetica-Bold', textColor=colors.HexColor('#111111'))
     
-    # 1. Header (Dati Azienda & Titolo Report)
     if m_head:
         data_header = [
             [
@@ -249,7 +250,6 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
         elements.append(t_header)
         elements.append(HRFlowable(width="100%", thickness=2, color=main_color, spaceAfter=12))
     
-    # 2. Dati Cliente (Acquisiti automaticamente dall'anagrafica)
     data_info = [
         [Paragraph(f"<b>Cliente:</b> {cliente_info['nome']}<br/><b>Indirizzo:</b> {cliente_info['indirizzo']}<br/><b>P.IVA / CF:</b> {cliente_info['piva']}", normal_style), 
          Paragraph(f"<b>Data Report:</b> {datetime.date.today()}<br/><b>Referente:</b> {cliente_info['referente']}<br/><b>Tel Cliente:</b> {cliente_info['telefono']}", normal_style)],
@@ -265,14 +265,12 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     elements.append(t_info)
     elements.append(Spacer(1, 12))
     
-    # 3. Dettaglio Lavorazioni
     if m_det:
         elements.append(Paragraph("<b>Dettaglio Interventi e Attività Eseguite:</b>", bold_style))
         elements.append(Spacer(1, 4))
         elements.append(Paragraph(dettagli.replace('\n', '<br/>'), normal_style))
         elements.append(Spacer(1, 10))
     
-    # 4. Materiali Utilizzati
     if m_mat:
         elements.append(Paragraph("<b>Materiali e Ricambi Utilizzati:</b>", bold_style))
         data_mat = [
@@ -288,7 +286,6 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
         elements.append(t_mat)
         elements.append(Spacer(1, 10))
     
-    # 5. Esito e Garanzia
     elements.append(Paragraph("<b>Esito e Note di Chiusura:</b>", bold_style))
     elements.append(Paragraph(f"<b>Nota Finale:</b> {nota_chiusura}", normal_style))
     
@@ -296,7 +293,6 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
         elements.append(Spacer(1, 4))
         elements.append(Paragraph(f"<b>Condizioni / Note Legali:</b><br/><i>{t_gar}</i>", normal_style))
     
-    # 6. Firme
     if m_fir:
         elements.append(Spacer(1, 20))
         data_firme = [
@@ -307,7 +303,6 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
         t_firme.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 4)]))
         elements.append(t_firme)
     
-    # 7. Piè di pagina
     if t_pie:
         elements.append(Spacer(1, 25))
         elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CCCCCC'), spaceAfter=4))
@@ -345,8 +340,8 @@ if st.sidebar.button("🛠️ Gestione Tecnici / Utenti", use_container_width=Tr
     st.session_state.menu_selezionato = "🛠️ Gestione Tecnici / Utenti"
 if st.sidebar.button("🏢 Gestione Gruppi", use_container_width=True):
     st.session_state.menu_selezionato = "🏢 Gestione Gruppi"
-if st.sidebar.button("⚙️ C1 Report Designer Studio", use_container_width=True):
-    st.session_state.menu_selezionato = "⚙️ C1 Report Designer Studio"
+if st.sidebar.button("⚙️ Report", use_container_width=True):
+    st.session_state.menu_selezionato = "⚙️ Report"
 
 st.sidebar.markdown("---")
 dim_testo = st.sidebar.slider("Dimensione testo Planning (px)", min_value=12, max_value=30, value=16)
@@ -573,7 +568,6 @@ if menu == "📅 Planning Principale":
                         st.session_state[f"open_interventi_{r[0]}"] = False
                         st.rerun()
 
-            # Chiusura intervento: preleva in automatico i dati dall'anagrafica cliente
             if st.session_state.get(f"open_chiusura_{r[0]}", False):
                 cliente_dati = get_clienti_dati(r[4])
 
@@ -1092,9 +1086,9 @@ elif menu == "🏢 Gestione Gruppi":
         else:
             st.info("Nessun gruppo registrato.")
 
-# ==================== 6. C1 REPORT DESIGNER STUDIO ====================
-elif menu == "⚙️ C1 Report Designer Studio":
-    st.title("⚙️ C1 Report Designer Studio")
+# ==================== 6. REPORT STUDIO ====================
+elif menu == "⚙️ Report":
+    st.title("⚙️ Report Studio")
     st.markdown("Progetta il layout del report in stile C1 Designer e **importa qualsiasi immagine o layout personalizzato (PDF, JPEG, PNG)** da sovrapporre o utilizzare come modello.")
 
     tpl = get_template_report()
