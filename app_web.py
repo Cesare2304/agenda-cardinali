@@ -33,6 +33,8 @@ DB_PATH = get_db_path()
 def inizializza_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    
+    # Tabella Appuntamenti / Interventi
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS appuntamenti (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +61,7 @@ def inizializza_db():
         except Exception:
             pass
 
+    # Tabella Clienti (Anagrafica)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS clienti (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,12 +81,15 @@ def inizializza_db():
         except Exception:
             pass
 
+    # Tabella Gruppi
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS gruppi (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome_gruppo TEXT NOT NULL UNIQUE
         )
     ''')
+    
+    # Tabella Utenti
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS utenti (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,6 +100,7 @@ def inizializza_db():
         )
     ''')
     
+    # Tabella Impostazioni Report (C1 Report Designer Studio)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS impostazioni_report (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -209,6 +216,7 @@ def get_template_report():
     else:
         return ("RAPPORTO DI INTERVENTO", "Helvetica", 10, "#1976D2", 1, 1, 1, 1, 1, "Garanzia standard...", "Piè di pagina...")
 
+# Generatore PDF Avanzato: preleva i dati automaticamente dall'anagrafica cliente
 def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     tpl = get_template_report()
     titolo_rep, font_fam, font_sz, colore_p, m_head, m_det, m_mat, m_gar, m_fir, t_gar, t_pie = tpl
@@ -228,6 +236,7 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=font_sz, textColor=colors.HexColor('#333333'), spaceAfter=6)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=font_sz, fontName='Helvetica-Bold', textColor=colors.HexColor('#111111'))
     
+    # 1. Header (Dati Azienda & Titolo Report)
     if m_head:
         data_header = [
             [
@@ -240,6 +249,7 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
         elements.append(t_header)
         elements.append(HRFlowable(width="100%", thickness=2, color=main_color, spaceAfter=12))
     
+    # 2. Dati Cliente (Acquisiti automaticamente dall'anagrafica)
     data_info = [
         [Paragraph(f"<b>Cliente:</b> {cliente_info['nome']}<br/><b>Indirizzo:</b> {cliente_info['indirizzo']}<br/><b>P.IVA / CF:</b> {cliente_info['piva']}", normal_style), 
          Paragraph(f"<b>Data Report:</b> {datetime.date.today()}<br/><b>Referente:</b> {cliente_info['referente']}<br/><b>Tel Cliente:</b> {cliente_info['telefono']}", normal_style)],
@@ -255,12 +265,14 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     elements.append(t_info)
     elements.append(Spacer(1, 12))
     
+    # 3. Dettaglio Lavorazioni
     if m_det:
         elements.append(Paragraph("<b>Dettaglio Interventi e Attività Eseguite:</b>", bold_style))
         elements.append(Spacer(1, 4))
         elements.append(Paragraph(dettagli.replace('\n', '<br/>'), normal_style))
         elements.append(Spacer(1, 10))
     
+    # 4. Materiali Utilizzati
     if m_mat:
         elements.append(Paragraph("<b>Materiali e Ricambi Utilizzati:</b>", bold_style))
         data_mat = [
@@ -276,6 +288,7 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
         elements.append(t_mat)
         elements.append(Spacer(1, 10))
     
+    # 5. Esito e Garanzia
     elements.append(Paragraph("<b>Esito e Note di Chiusura:</b>", bold_style))
     elements.append(Paragraph(f"<b>Nota Finale:</b> {nota_chiusura}", normal_style))
     
@@ -283,6 +296,7 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
         elements.append(Spacer(1, 4))
         elements.append(Paragraph(f"<b>Condizioni / Note Legali:</b><br/><i>{t_gar}</i>", normal_style))
     
+    # 6. Firme
     if m_fir:
         elements.append(Spacer(1, 20))
         data_firme = [
@@ -293,6 +307,7 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
         t_firme.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 4)]))
         elements.append(t_firme)
     
+    # 7. Piè di pagina
     if t_pie:
         elements.append(Spacer(1, 25))
         elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CCCCCC'), spaceAfter=4))
@@ -305,6 +320,7 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
 if 'menu_selezionato' not in st.session_state:
     st.session_state.menu_selezionato = "📅 Planning Principale"
 
+# ==================== MENU LATERALE ====================
 st.sidebar.title(f"📅 {NOME_DITTA}")
 st.sidebar.markdown(f"👤 Utente: **{st.session_state.utente_corrente}** (*{st.session_state.gruppo_corrente}*)")
 if st.sidebar.button("🚪 Logout", use_container_width=True):
@@ -363,6 +379,7 @@ if count_urgenti > 0:
 
 menu = st.session_state.menu_selezionato
 
+# ==================== 1. PLANNING PRINCIPALE ====================
 if menu == "📅 Planning Principale":
     st.title("📅 Planning Attività e Urgenze")
     
@@ -556,6 +573,7 @@ if menu == "📅 Planning Principale":
                         st.session_state[f"open_interventi_{r[0]}"] = False
                         st.rerun()
 
+            # Chiusura intervento: preleva in automatico i dati dall'anagrafica cliente
             if st.session_state.get(f"open_chiusura_{r[0]}", False):
                 cliente_dati = get_clienti_dati(r[4])
 
@@ -651,6 +669,7 @@ if menu == "📅 Planning Principale":
     else:
         st.info("Nessuna attività attiva trovata.")
 
+# ==================== 2. ARCHIVIO STORICO ====================
 elif menu == "📁 Archivio Storico":
     st.title("📁 Archivio Storico Interventi")
     
@@ -726,6 +745,7 @@ elif menu == "📁 Archivio Storico":
     else:
         st.info("L'archivio storico è vuoto.")
 
+# ==================== 3. GESTIONE CLIENTI ====================
 elif menu == "👥 Gestione Clienti":
     st.title("👥 Gestione e Anagrafica Clienti")
     
@@ -861,6 +881,7 @@ elif menu == "👥 Gestione Clienti":
         else:
             st.info("Nessun cliente registrato.")
 
+# ==================== 4. GESTIONE TECNICI / UTENTI ====================
 elif menu == "🛠️ Gestione Tecnici / Utenti":
     st.title("🛠️ Gestione Utenti e Mansioni (Tecnici)")
     st.markdown("La mansione del tecnico è determinata direttamente dal **Gruppo** di appartenenza.")
@@ -974,6 +995,7 @@ elif menu == "🛠️ Gestione Tecnici / Utenti":
         else:
             st.info("Nessun utente registrato.")
 
+# ==================== 5. GESTIONE GRUPPI ====================
 elif menu == "🏢 Gestione Gruppi":
     st.title("🏢 Gestione Gruppi e Mansioni")
     
@@ -1070,6 +1092,7 @@ elif menu == "🏢 Gestione Gruppi":
         else:
             st.info("Nessun gruppo registrato.")
 
+# ==================== 6. C1 REPORT DESIGNER STUDIO ====================
 elif menu == "⚙️ C1 Report Designer Studio":
     st.title("⚙️ C1 Report Designer Studio")
     st.markdown("Progetta il layout del report in stile C1 Designer e **importa qualsiasi immagine o layout personalizzato (PDF, JPEG, PNG)** da sovrapporre o utilizzare come modello.")
@@ -1110,4 +1133,58 @@ elif menu == "⚙️ C1 Report Designer Studio":
             new_garanzia = st.text_area("Testo Garanzia / Condizioni", value=t_garz)
             new_pie = st.text_input("Piè di pagina Legale", value=t_pie)
 
-            if st.form_submit_button("💾 Salva Configurazione Report", use_container_width=True
+            if st.form_submit_button("Salva Configurazione Report", use_container_width=True):
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM impostazioni_report")
+                cursor.execute("""
+                    INSERT INTO impostazioni_report 
+                    (titolo_report, font_family, font_size, colore_primario, 
+                     mostra_header, mostra_dettagli, mostra_materiali, mostra_garanzia, 
+                     mostra_firme, testo_garanzia, testo_pie) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (new_titolo, new_font, new_size, new_color, int(c_hd), int(c_dt), int(c_mt), int(c_gr), int(c_fr), new_garanzia, new_pie))
+                conn.commit()
+                conn.close()
+                st.success("Configurazione salvata con successo!")
+                st.rerun()
+
+    with col_design:
+        st.subheader("📐 Report Structure & Live Preview")
+        st.markdown("Anteprima visiva interattiva delle sezioni (Header, Dettagli, Materiali, Footer) strutturata come in C1 Designer:")
+
+        st.markdown(f"""
+            <div style="border: 2px dashed {new_color}; border-radius: 6px; padding: 15px; background: #ffffff; font-family: sans-serif;">
+                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; font-weight: bold; color: #333;">
+                    📄 Report Header (Intestazione Azienda & Titolo)
+                </div>
+                <div style="padding: 8px; font-size: 13px; color: {new_color}; font-weight: bold;">
+                    {new_titolo}
+                </div>
+                
+                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">
+                    📋 PageHeader / Dati Cliente (Acquisiti dall'Anagrafica)
+                </div>
+                <div style="padding: 8px; font-size: 11px; color: #555;">
+                    <b>Cliente:</b> [Nome Azienda da Anagrafica] | <b>P.IVA:</b> [P.IVA]<br/>
+                    <b>Indirizzo:</b> [Indirizzo Cliente] | <b>Referente:</b> [Referente]
+                </div>
+
+                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">
+                    ⚙️ Detail Section (Lavorazioni Eseguite)
+                </div>
+                <div style="padding: 8px; font-size: 11px; color: #444;">
+                    - Descrizione dettagliata dell'intervento tecnico registrato in chiusura...
+                </div>
+
+                {'<div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">🛠️ Materiali e Ricambi</div><div style="padding: 6px; font-size: 10px; color: #666;">Tabella materiali utilizzati</div>' if c_mt else ''}
+
+                {'<div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">⚖️ Box Condizioni e Garanzia</div><div style="padding: 6px; font-size: 10px; color: #666;">' + new_garanzia[:80] + '...</div>' if c_gr else ''}
+
+                {'<div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">✍️ Sezione Firme (Tecnico / Cliente)</div>' if c_fr else ''}
+
+                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-top: 1px solid #ccc; font-weight: bold; color: #333; text-align: center;">
+                    👣 PageFooter: {new_pie}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
