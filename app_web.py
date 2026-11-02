@@ -695,7 +695,7 @@ if menu == "📅 Planning Principale":
     else:
         st.info("Nessuna attività attiva trovata.")
         elif menu == "📁 Archivio Storico":
-    st.title("📁 Archivio Storico Interventi")
+            st.title("📁 Archivio Storico Interventi")
     
     arc_h1, arc_h2 = st.columns([4, 1])
     with arc_h1:
