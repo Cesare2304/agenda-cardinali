@@ -1167,53 +1167,32 @@ elif menu == "⚙️ Report":
         st.subheader("📐 Report Structure & Live Preview")
         st.markdown("Anteprima visiva interattiva delle sezioni (Header, Dettagli, Materiali, Footer) strutturata come in C1 Designer:")
 
-        sezioni_html = f"""
-            <div style="border: 2px dashed {new_color}; border-radius: 6px; padding: 15px; background: #ffffff; font-family: sans-serif;">
-                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; font-weight: bold; color: #333;">
-                    📄 Report Header (Intestazione Azienda & Titolo)
-                </div>
-                <div style="padding: 8px; font-size: 13px; color: {new_color}; font-weight: bold;">
-                    {new_titolo}
-                </div>
+        # Container nativo con bordo stilizzato per simulare il foglio di anteprima in modo pulito e sicuro
+        with st.container(border=True):
+            st.markdown(f"**📄 Report Header (Intestazione Azienda & Titolo)**")
+            st.markdown(f"<h3 style='color: {new_color}; margin-top: 0;'>{new_titolo}</h3>", unsafe_allow_html=True)
+            st.markdown("---")
+            
+            st.markdown("**📋 PageHeader / Dati Cliente (Acquisiti dall'Anagrafica)**")
+            st.caption("<b>Cliente:</b> [Nome Azienda da Anagrafica] | <b>P.IVA:</b> [P.IVA]<br><b>Indirizzo:</b> [Indirizzo Cliente] | <b>Referente:</b> [Referente]")
+            st.markdown("---")
+            
+            st.markdown("**⚙️ Detail Section (Lavorazioni Eseguite)**")
+            st.caption("- Descrizione dettagliata dell'intervento tecnico registrato in chiusura...")
+            
+            if c_mt:
+                st.markdown("---")
+                st.markdown("**🛠️ Materiali e Ricambi**")
+                st.caption("Tabella materiali utilizzati")
                 
-                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">
-                    📋 PageHeader / Dati Cliente (Acquisiti dall'Anagrafica)
-                </div>
-                <div style="padding: 8px; font-size: 11px; color: #555;">
-                    <b>Cliente:</b> [Nome Azienda da Anagrafica] | <b>P.IVA:</b> [P.IVA]<br/>
-                    <b>Indirizzo:</b> [Indirizzo Cliente] | <b>Referente:</b> [Referente]
-                </div>
-
-                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">
-                    ⚙️ Detail Section (Lavorazioni Eseguite)
-                </div>
-                <div style="padding: 8px; font-size: 11px; color: #444;">
-                    - Descrizione dettagliata dell'intervento tecnico registrato in chiusura...
-                </div>
-        """
-
-        if c_mt:
-            sezioni_html += """
-                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">🛠️ Materiali e Ricambi</div>
-                <div style="padding: 6px; font-size: 10px; color: #666;">Tabella materiali utilizzati</div>
-            """
-
-        if c_gr:
-            sezioni_html += f"""
-                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">⚖️ Box Condizioni e Garanzia</div>
-                <div style="padding: 6px; font-size: 10px; color: #666;">{new_garanzia[:80]}...</div>
-            """
-
-        if c_fr:
-            sezioni_html += """
-                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">✍️ Sezione Firme (Tecnico / Cliente)</div>
-            """
-
-        sezioni_html += f"""
-                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-top: 1px solid #ccc; font-weight: bold; color: #333; text-align: center;">
-                    👣 PageFooter: {new_pie}
-                </div>
-            </div>
-        """
-
-        st.markdown(sezioni_html, unsafe_allow_html=True)
+            if c_gr:
+                st.markdown("---")
+                st.markdown("**⚖️ Box Condizioni e Garanzia**")
+                st.caption(f"{new_garanzia[:80]}...")
+                
+            if c_fr:
+                st.markdown("---")
+                st.markdown("**✍️ Sezione Firme (Tecnico / Cliente)**")
+                
+            st.markdown("---")
+            st.markdown(f"<div style='text-align: center; font-size: 11px; color: #666;'>👣 PageFooter: {new_pie}</div>", unsafe_allow_html=True)
