@@ -118,6 +118,26 @@ def inizializza_db():
         )
     ''')
     
+    # Aggiunta sicura colonne tabella impostazioni_report se già esistente con struttura vecchia
+    colonne_report = [
+        ("titolo_report", "TEXT DEFAULT 'RAPPORTO DI INTERVENTO'"),
+        ("font_family", "TEXT DEFAULT 'Helvetica'"),
+        ("font_size", "INTEGER DEFAULT 10"),
+        ("colore_primario", "TEXT DEFAULT '#1976D2'"),
+        ("mostra_header", "INTEGER DEFAULT 1"),
+        ("mostra_dettagli", "INTEGER DEFAULT 1"),
+        ("mostra_materiali", "INTEGER DEFAULT 1"),
+        ("mostra_garanzia", "INTEGER DEFAULT 1"),
+        ("mostra_firme", "INTEGER DEFAULT 1"),
+        ("testo_garanzia", "TEXT DEFAULT 'Si certifica che i lavori sono stati eseguiti a regola d arte.'"),
+        ("testo_pie", "TEXT DEFAULT 'Documento emesso da Agenda Cardinali - Tutti i diritti riservati.'")
+    ]
+    for col, col_type in colonne_report:
+        try:
+            cursor.execute(f"ALTER TABLE impostazioni_report ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass
+    
     cursor.execute("SELECT COUNT(*) FROM gruppi")
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO gruppi (nome_gruppo) VALUES ('admin')")
