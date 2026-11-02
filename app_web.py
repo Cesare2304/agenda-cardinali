@@ -1167,7 +1167,7 @@ elif menu == "⚙️ Report":
         st.subheader("📐 Report Structure & Live Preview")
         st.markdown("Anteprima visiva interattiva delle sezioni (Header, Dettagli, Materiali, Footer) strutturata come in C1 Designer:")
 
-        st.markdown(f"""
+        sezioni_html = f"""
             <div style="border: 2px dashed {new_color}; border-radius: 6px; padding: 15px; background: #ffffff; font-family: sans-serif;">
                 <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; font-weight: bold; color: #333;">
                     📄 Report Header (Intestazione Azienda & Titolo)
@@ -1190,15 +1190,30 @@ elif menu == "⚙️ Report":
                 <div style="padding: 8px; font-size: 11px; color: #444;">
                     - Descrizione dettagliata dell'intervento tecnico registrato in chiusura...
                 </div>
+        """
 
-                {'<div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">🛠️ Materiali e Ricambi</div><div style="padding: 6px; font-size: 10px; color: #666;">Tabella materiali utilizzati</div>' if c_mt else ''}
+        if c_mt:
+            sezioni_html += """
+                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">🛠️ Materiali e Ricambi</div>
+                <div style="padding: 6px; font-size: 10px; color: #666;">Tabella materiali utilizzati</div>
+            """
 
-                {'<div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">⚖️ Box Condizioni e Garanzia</div><div style="padding: 6px; font-size: 10px; color: #666;">' + new_garanzia[:80] + '...</div>' if c_gr else ''}
+        if c_gr:
+            sezioni_html += f"""
+                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">⚖️ Box Condizioni e Garanzia</div>
+                <div style="padding: 6px; font-size: 10px; color: #666;">{new_garanzia[:80]}...</div>
+            """
 
-                {'<div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">✍️ Sezione Firme (Tecnico / Cliente)</div>' if c_fr else ''}
+        if c_fr:
+            sezioni_html += """
+                <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-bottom: 1px solid #ccc; border-top: 1px solid #ccc; font-weight: bold; color: #333;">✍️ Sezione Firme (Tecnico / Cliente)</div>
+            """
 
+        sezioni_html += f"""
                 <div style="background: #eef2f5; padding: 6px; font-size: 11px; border-top: 1px solid #ccc; font-weight: bold; color: #333; text-align: center;">
                     👣 PageFooter: {new_pie}
                 </div>
             </div>
-        """, unsafe_allow_html=True)
+        """
+
+        st.markdown(sezioni_html, unsafe_allow_html=True)
