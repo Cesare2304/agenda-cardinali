@@ -1201,69 +1201,73 @@ elif menu == "⚙️ Configura Report":
     with col_preview:
         st.subheader("👁️ Live Preview Visiva del PDF")
         
-        prev_firme = """
-            <table style="width: 100%; margin-top: 30px;">
-                <tr>
-                    <td style="border-top: 1px solid #333; padding-top: 8px; font-size:11px; width: 50%;"><b>Firma del Tecnico</b></td>
-                    <td style="border-top: 1px solid #333; padding-top: 8px; font-size:11px; width: 50%;"><b>Firma per Accettazione Cliente</b></td>
-                </tr>
-            </table>
-        """ if cfg_firme else ""
-
-        prev_mat = """
-            <div style="background:#f1f3f4; padding:8px; margin:8px 0; font-size:11px; border:1px solid #ddd; border-radius: 4px;">
-                <b>Tabella Materiali e Ricambi:</b><br>
-                <span style="color: #666; font-size: 10px;">- Materiale standard incluso nell'intervento</span>
-            </div>
-        """ if cfg_mat else ""
-
-        prev_gar = f"""
-            <div style="font-size:10px; color:#555; margin-top:10px; background: #fafafa; padding: 6px; border-left: 3px solid {cfg_colore};">
-                <b>Condizioni di Garanzia:</b> {cfg_condizioni}
-            </div>
-        """ if cfg_gar else ""
-
-        prev_pie = f"""
-            <div style="font-size:9px; color:#777; border-top:1px solid #eee; margin-top:20px; padding-top:6px; text-align:center;">
-                {cfg_pie}
-            </div>
-        """ if cfg_pie_attivo else ""
-
-        preview_html = f"""
-            <div style="border: 1px solid #ccc; border-radius: 6px; padding: 20px; background: #ffffff; color: #333; font-family: Arial, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+        with st.container():
+            st.markdown(f"""
+            <div style="border: 2px solid #ddd; border-radius: 8px; padding: 20px; background-color: #ffffff; color: #333333; font-family: sans-serif;">
                 <div style="display: flex; justify-content: space-between; border-bottom: 2px solid {cfg_colore}; padding-bottom: 8px; margin-bottom: 12px;">
                     <div>
-                        <div style="font-weight: bold; font-size: 15px; color: {cfg_colore};">{cfg_rag_soc or 'Nome Azienda'}</div>
-                        <div style="font-size: 9px; color: #555; margin-top: 2px;">P.IVA: {cfg_piva} | {cfg_ind}<br>Tel: {cfg_tel} | {cfg_email}</div>
+                        <strong style="font-size: 16px; color: {cfg_colore};">{cfg_rag_soc if cfg_rag_soc else 'Nome Azienda'}</strong><br/>
+                        <span style="font-size: 10px; color: #555555;">P.IVA: {cfg_piva} | {cfg_ind}<br/>Tel: {cfg_tel} | {cfg_email}</span>
                     </div>
                     <div style="text-align: right;">
-                        <div style="font-weight: bold; font-size: 13px; color: {cfg_colore};">{cfg_titolo_rep}</div>
-                        <div style="font-size: 9px; color: #777;">Data: {datetime.date.today()}</div>
+                        <strong style="font-size: 14px; color: {cfg_colore};">{cfg_titolo_rep}</strong><br/>
+                        <span style="font-size: 10px; color: #777777;">Data: {datetime.date.today()}</span>
                     </div>
                 </div>
-                
-                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px; font-size: 11px; margin-bottom: 10px; border: 1px solid #e9ecef;">
-                    <b>Cliente:</b> Mario Rossi (Esempio S.R.L.)<br>
-                    <b>Tecnico Incaricato:</b> Luigi Bianchi<br>
-                    <b>Oggetto:</b> Manutenzione straordinaria impianto
-                </div>
-                
-                <div style="font-size: 11px; margin-bottom: 8px; line-height: 1.4;">
-                    <b>Dettaglio Interventi Eseguiti:</b><br>
-                    • Verifica generale delle componenti elettriche e meccaniche.<br>
-                    • Soluzioni applicate e collaudo finale eseguito con successo.
-                </div>
-                
-                {prev_mat}
-                
-                <div style="font-size: 11px; margin-top: 8px;">
-                    <b>Nota Chiusura:</b> Intervento completato a regola d'arte.
-                </div>
-                
-                {prev_gar}
-                {prev_firme}
-                {prev_pie}
             </div>
-        """
+            """, unsafe_allow_html=True)
+            
+            st.markdown("""
+            <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; padding: 10px; border-radius: 4px; font-size: 12px; margin-top: 10px;">
+                <b>Cliente:</b> Mario Rossi (Esempio S.R.L.)<br/>
+                <b>Tecnico Incaricato:</b> Luigi Bianchi<br/>
+                <b>Oggetto:</b> Manutenzione straordinaria impianto
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.markdown(preview_html, unsafe_allow_html=True)
+            st.markdown("""
+            <div style="font-size: 12px; margin-top: 12px; margin-bottom: 12px; line-height: 1.5;">
+                <b>Dettaglio Interventi Eseguiti:</b><br/>
+                • Verifica generale delle componenti elettriche e meccaniche.<br/>
+                • Soluzioni applicate e collaudo finale eseguito con successo.
+            </div>
+            """, unsafe_allow_html=True)
+
+            if cfg_mat:
+                st.markdown("""
+                <div style="background-color: #f1f3f4; border: 1px solid #dddddd; padding: 8px; border-radius: 4px; font-size: 11px; margin-bottom: 12px;">
+                    <b>Tabella Materiali e Ricambi:</b><br/>
+                    <span style="color: #666666; font-size: 10px;">- Materiale standard incluso nell'intervento</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("""
+            <div style="font-size: 12px; margin-bottom: 12px;">
+                <b>Nota Chiusura:</b> Intervento completato a regola d'arte.
+            </div>
+            """, unsafe_allow_html=True)
+
+            if cfg_gar:
+                st.markdown(f"""
+                <div style="font-size: 10px; color: #555555; background-color: #fafafa; padding: 8px; border-left: 3px solid {cfg_colore}; margin-bottom: 15px;">
+                    <b>Condizioni di Garanzia:</b> {cfg_condizioni}
+                </div>
+                """, unsafe_allow_html=True)
+
+            if cfg_firme:
+                st.markdown("""
+                <table style="width: 100%; margin-top: 20px; border-collapse: collapse;">
+                    <tr>
+                        <td style="border-top: 1px solid #333333; padding-top: 6px; font-size: 11px; width: 48%;"><b>Firma del Tecnico</b></td>
+                        <td style="width: 4%;"></td>
+                        <td style="border-top: 1px solid #333333; padding-top: 6px; font-size: 11px; width: 48%;"><b>Firma per Accettazione Cliente</b></td>
+                    </tr>
+                </table>
+                """, unsafe_allow_html=True)
+
+            if cfg_pie_attivo and cfg_pie:
+                st.markdown(f"""
+                <div style="font-size: 9px; color: #777777; border-top: 1px solid #eeeeee; margin-top: 20px; padding-top: 6px; text-align: center;">
+                    {cfg_pie}
+                </div>
+                """, unsafe_allow_html=True)
