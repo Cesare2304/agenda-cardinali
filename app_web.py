@@ -1,6 +1,7 @@
 import sqlite3
 import datetime
 import os
+import json
 import streamlit as st
 import pandas as pd
 from io import BytesIO
@@ -85,7 +86,6 @@ def inizializza_db():
         )
     ''')
     
-    # Tabella per il Report Designer Avanzato
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS impostazioni_report (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -224,7 +224,6 @@ def get_template_report():
         return ("Agenda Cardinali S.R.L.", "P.IVA 01234567890", "Via Roma 1", "055123456", "info@test.it", 
                 "RAPPORTO DI INTERVENTO", "Condizioni standard...", "Piè di pagina...", "#1976D2", 1, 1, 1, 1, 0)
 
-# Generatore PDF Avanzato (Report Designer Engine)
 def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
                       intestazione, cliente, titolo, tecnico, dettagli, 
                       condizioni, nota_chiusura, pie, 
@@ -247,7 +246,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#333333'), spaceAfter=6)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=colors.HexColor('#111111'))
     
-    # 1. Intestazione Aziendale
     data_header = [
         [
             Paragraph(f"<b>{ragione_sociale}</b><br/><font size=8>P.IVA: {p_iva} | Indirizzo: {indirizzo_az}<br/>Tel: {tel_az} | Email: {email_az}</font>", company_style),
@@ -262,7 +260,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
     elements.append(t_header)
     elements.append(HRFlowable(width="100%", thickness=2, color=main_color, spaceAfter=12))
     
-    # 2. Dati Cliente e Intervento
     data_info = [
         [Paragraph(f"<b>Cliente:</b> {cliente}", normal_style), Paragraph(f"<b>Data Report:</b> {datetime.date.today()}", normal_style)],
         [Paragraph(f"<b>Oggetto:</b> {titolo}", normal_style), Paragraph(f"<b>Tecnico Incaricato:</b> {tecnico}", normal_style)]
@@ -277,13 +274,11 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
     elements.append(t_info)
     elements.append(Spacer(1, 12))
     
-    # 3. Dettaglio Lavorazioni
     elements.append(Paragraph("<b>Dettaglio Interventi e Attività Eseguite:</b>", bold_style))
     elements.append(Spacer(1, 4))
     elements.append(Paragraph(dettagli.replace('\n', '<br/>'), normal_style))
     elements.append(Spacer(1, 10))
     
-    # 4. Sezione Modulare: Materiali Utilizzati (Opzionale)
     if mostra_materiali:
         elements.append(Paragraph("<b>Materiali e Ricambi Utilizzati:</b>", bold_style))
         data_mat = [
@@ -299,7 +294,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
         elements.append(t_mat)
         elements.append(Spacer(1, 10))
     
-    # 5. Note Chiusura e Condizioni di Garanzia
     elements.append(Paragraph("<b>Esito e Note di Chiusura:</b>", bold_style))
     elements.append(Paragraph(f"<b>Nota Finale:</b> {nota_chiusura}", normal_style))
     
@@ -307,7 +301,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
         elements.append(Spacer(1, 4))
         elements.append(Paragraph(f"<b>Condizioni di Garanzia / Note Legali:</b><br/><i>{condizioni}</i>", normal_style))
     
-    # 6. Sezione Firme Modulare
     if mostra_firme:
         elements.append(Spacer(1, 20))
         data_firme = [
@@ -321,7 +314,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
         ]))
         elements.append(t_firme)
     
-    # 7. Piè di pagina Legale
     if mostra_pie and pie:
         elements.append(Spacer(1, 25))
         elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CCCCCC'), spaceAfter=4))
@@ -588,7 +580,6 @@ if menu == "📅 Planning Principale":
                         st.session_state[f"open_interventi_{r[0]}"] = False
                         st.rerun()
 
-            # MODULO CHIUSURA E REPORT DESIGN AVANZATO
             if st.session_state.get(f"open_chiusura_{r[0]}", False):
                 (rag_soc, piva, ind_az, tel_az, email_az, 
                  tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo, 
@@ -1135,71 +1126,111 @@ elif menu == "🏢 Gestione Gruppi":
         else:
             st.info("Nessun gruppo registrato.")
 
-# ==================== SEZIONE 6: CONFIGURA REPORT (REPORT DESIGNER VISIVO & LIVE PREVIEW) ====================
+# ==================== SEZIONE 6: CONFIGURA REPORT (INTERATTIVO IN DIRETTA & IMPORT/EXPORT LAYOUT) ====================
 elif menu == "⚙️ Configura Report":
-    st.title("⚙️ Report Designer Visivo & Live Preview")
-    st.markdown("Modifica lo stile grafico e vedi in tempo reale l'anteprima esatta di come apparirà il PDF stampato.")
+    st.title("⚙️ Report Designer Interattivo & Layout Studio")
+    st.markdown("Modifica qualsiasi parametro qui sotto: l'anteprima si aggiornerà **in tempo reale** in diretta. Puoi anche **importare** o **esportare** il tuo layout personalizzato in formato JSON.")
 
-    (rag_soc, piva, ind_az, tel_az, email_az, 
-     tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo, 
-     tpl_mat, tpl_gar, tpl_margine) = get_template_report()
+    (rag_soc_db, piva_db, ind_az_db, tel_az_db, email_az_db, 
+     tpl_i_db, tpl_c_db, tpl_pie_db, tpl_colore_db, tpl_firme_db, tpl_pie_attivo_db, 
+     tpl_mat_db, tpl_gar_db, tpl_margine_db) = get_template_report()
+
+    # Sezione di Importazione / Esportazione Layout (Stile C1 Report Definition)
+    col_imp1, col_imp2 = st.columns(2)
+    with col_imp1:
+        uploaded_layout = st.file_uploader("📂 Importa Layout da file JSON", type=["json"])
+        if uploaded_layout is not None:
+            try:
+                layout_data = json.load(uploaded_layout)
+                rag_soc_db = layout_data.get("ragione_sociale", rag_soc_db)
+                piva_db = layout_data.get("p_iva", piva_db)
+                ind_az_db = layout_data.get("indirizzo_az", ind_az_db)
+                tel_az_db = layout_data.get("tel_az", tel_az_db)
+                email_az_db = layout_data.get("email_az", email_az_db)
+                tpl_i_db = layout_data.get("intestazione", tpl_i_db)
+                tpl_colore_db = layout_data.get("colore_primario", tpl_colore_db)
+                tpl_c_db = layout_data.get("condizioni_standard", tpl_c_db)
+                tpl_pie_db = layout_data.get("note_pie_pagina", tpl_pie_db)
+                tpl_firme_db = layout_data.get("mostra_firme", tpl_firme_db)
+                tpl_pie_attivo_db = layout_data.get("mostra_pie", tpl_pie_attivo_db)
+                tpl_mat_db = layout_data.get("mostra_materiali", tpl_mat_db)
+                tpl_gar_db = layout_data.get("mostra_garanzia", tpl_gar_db)
+                st.success("Layout importato correttamente in anteprima!")
+            except Exception as e:
+                st.error(f"Errore durante l'importazione: {e}")
+
+    with col_imp2:
+        current_layout_dict = {
+            "ragione_sociale": rag_soc_db, "p_iva": piva_db, "indirizzo_az": ind_az_db,
+            "tel_az": tel_az_db, "email_az": email_az_db, "intestazione": tpl_i_db,
+            "colore_primario": tpl_colore_db, "condizioni_standard": tpl_c_db,
+            "note_pie_pagina": tpl_pie_db, "mostra_firme": int(tpl_firme_db),
+            "mostra_pie": int(tpl_pie_attivo_db), "mostra_materiali": int(tpl_mat_db),
+            "mostra_garanzia": int(tpl_gar_db)
+        }
+        st.download_button(
+            label="💾 Esporta Layout Attuale (JSON)",
+            data=json.dumps(current_layout_dict, indent=4),
+            file_name="layout_report_personalizzato.json",
+            mime="application/json",
+            use_container_width=True
+        )
+
+    st.markdown("---")
 
     col_editor, col_preview = st.columns([1, 1], gap="large")
 
     with col_editor:
-        st.subheader("🛠️ Personalizzazione Blocchi")
-        with st.form("form_config_report"):
-            cfg_rag_soc = st.text_input("Ragione Sociale Azienda", value=rag_soc or "")
-            cfg_piva = st.text_input("Partita IVA", value=piva or "")
-            cfg_ind = st.text_input("Indirizzo", value=ind_az or "")
-            cfg_tel = st.text_input("Telefono", value=tel_az or "")
-            cfg_email = st.text_input("Email", value=email_az or "")
-            cfg_titolo_rep = st.text_input("Titolo Rapporto PDF", value=tpl_i or "")
-            
-            try:
-                colore_iniziale = tpl_colore if tpl_colore.startswith("#") and len(tpl_colore) == 7 else "#1976D2"
-            except:
-                colore_iniziale = "#1976D2"
-            cfg_colore = st.color_picker("Colore Principale (Accento Grafico)", value=colore_iniziale)
-            
-            st.markdown("---")
-            st.markdown("##### Sezioni Visibili nel PDF:")
-            cfg_firme = st.checkbox("Mostra Blocco Firme", value=bool(tpl_firme))
-            cfg_pie_attivo = st.checkbox("Mostra Piè di pagina Legale", value=bool(tpl_pie_attivo))
-            cfg_mat = st.checkbox("Mostra Tabella Materiali", value=bool(tpl_mat))
-            cfg_gar = st.checkbox("Mostra Box Condizioni / Garanzia", value=bool(tpl_gar))
-            cfg_margine = st.checkbox("Utilizza Margini Stretti nel Foglio", value=bool(tpl_margine))
+        st.subheader("🛠️ Strumenti di Modifica Diretta")
+        
+        # Widget reattivi fuori dai form, per aggiornamento in diretta immediato
+        cfg_rag_soc = st.text_input("Ragione Sociale Azienda", value=rag_soc_db or "")
+        cfg_piva = st.text_input("Partita IVA", value=piva_db or "")
+        cfg_ind = st.text_input("Indirizzo", value=ind_az_db or "")
+        cfg_tel = st.text_input("Telefono", value=tel_az_db or "")
+        cfg_email = st.text_input("Email", value=email_az_db or "")
+        cfg_titolo_rep = st.text_input("Titolo Rapporto PDF", value=tpl_i_db or "")
+        
+        try:
+            colore_iniziale = tpl_colore_db if tpl_colore_db.startswith("#") and len(tpl_colore_db) == 7 else "#1976D2"
+        except:
+            colore_iniziale = "#1976D2"
+        cfg_colore = st.color_picker("Colore Principale (Accento Grafico)", value=colore_iniziale)
+        
+        st.markdown("##### Sezioni Visibili nel PDF:")
+        cfg_firme = st.checkbox("Mostra Blocco Firme", value=bool(tpl_firme_db))
+        cfg_pie_attivo = st.checkbox("Mostra Piè di pagina Legale", value=bool(tpl_pie_attivo_db))
+        cfg_mat = st.checkbox("Mostra Tabella Materiali", value=bool(tpl_mat_db))
+        cfg_gar = st.checkbox("Mostra Box Condizioni / Garanzia", value=bool(tpl_gar_db))
+        cfg_margine = st.checkbox("Utilizza Margini Stretti nel Foglio", value=bool(tpl_margine_db))
 
-            st.markdown("---")
-            cfg_condizioni = st.text_area("Condizioni Generali / Garanzia", value=tpl_c or "", height=80)
-            cfg_pie = st.text_input("Testo Piè di Pagina", value=tpl_pie or "")
+        cfg_condizioni = st.text_area("Condizioni Generali / Garanzia", value=tpl_c_db or "", height=85)
+        cfg_pie = st.text_input("Testo Piè di Pagina", value=tpl_pie_db or "")
 
-            salva_tpl = st.form_submit_button("💾 Salva Modifiche Globali Report", use_container_width=True)
-
-            if salva_tpl:
-                conn = sqlite3.connect(DB_PATH)
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM impostazioni_report")
-                cursor.execute("""
-                    INSERT INTO impostazioni_report 
-                    (ragione_sociale, p_iva, indirizzo_az, tel_az, email_az, 
-                     intestazione, condizioni_standard, note_pie_pagina, 
-                     colore_primario, mostra_firme, mostra_pie, 
-                     mostra_materiali, mostra_garanzia, margine_stretto) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    cfg_rag_soc, cfg_piva, cfg_ind, cfg_tel, cfg_email,
-                    cfg_titolo_rep, cfg_condizioni, cfg_pie,
-                    cfg_colore, int(cfg_firme), int(cfg_pie_attivo),
-                    int(cfg_mat), int(cfg_gar), int(cfg_margine)
-                ))
-                conn.commit()
-                conn.close()
-                st.success("Configurazione salvata con successo!")
-                st.rerun()
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("💾 Salva Modifiche Globali nel Database", use_container_width=True):
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM impostazioni_report")
+            cursor.execute("""
+                INSERT INTO impostazioni_report 
+                (ragione_sociale, p_iva, indirizzo_az, tel_az, email_az, 
+                 intestazione, condizioni_standard, note_pie_pagina, 
+                 colore_primario, mostra_firme, mostra_pie, 
+                 mostra_materiali, mostra_garanzia, margine_stretto) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                cfg_rag_soc, cfg_piva, cfg_ind, cfg_tel, cfg_email,
+                cfg_titolo_rep, cfg_condizioni, cfg_pie,
+                cfg_colore, int(cfg_firme), int(cfg_pie_attivo),
+                int(cfg_mat), int(cfg_gar), int(cfg_margine)
+            ))
+            conn.commit()
+            conn.close()
+            st.success("Configurazione salvata con successo nel database!")
 
     with col_preview:
-        st.subheader("👁️ Live Preview Visiva del PDF")
+        st.subheader("👁️ Live Preview in Diretta")
         
         with st.container():
             st.markdown(f"""
