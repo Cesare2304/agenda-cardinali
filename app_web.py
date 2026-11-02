@@ -84,23 +84,36 @@ def inizializza_db():
             telefono TEXT
         )
     ''')
+    
+    # Tabella per il Report Designer Avanzato
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS impostazioni_report (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ragione_sociale TEXT,
+            p_iva TEXT,
+            indirizzo_az TEXT,
+            tel_az TEXT,
+            email_az TEXT,
             intestazione TEXT,
             condizioni_standard TEXT,
             note_pie_pagina TEXT,
             colore_primario TEXT DEFAULT '#1976D2',
             mostra_firme INTEGER DEFAULT 1,
-            mostra_pie INTEGER DEFAULT 1
+            mostra_pie INTEGER DEFAULT 1,
+            mostra_materiali INTEGER DEFAULT 1,
+            mostra_garanzia INTEGER DEFAULT 1,
+            margine_stretto INTEGER DEFAULT 0
         )
     ''')
     
-    for col, col_type in [
-        ("colore_primario", "TEXT DEFAULT '#1976D2'"), 
-        ("mostra_firme", "INTEGER DEFAULT 1"), 
-        ("mostra_pie", "INTEGER DEFAULT 1")
-    ]:
+    colonne_report = [
+        ("ragione_sociale", "TEXT"), ("p_iva", "TEXT"), ("indirizzo_az", "TEXT"),
+        ("tel_az", "TEXT"), ("email_az", "TEXT"), ("colore_primario", "TEXT DEFAULT '#1976D2'"),
+        ("mostra_firme", "INTEGER DEFAULT 1"), ("mostra_pie", "INTEGER DEFAULT 1"),
+        ("mostra_materiali", "INTEGER DEFAULT 1"), ("mostra_garanzia", "INTEGER DEFAULT 1"),
+        ("margine_stretto", "INTEGER DEFAULT 0")
+    ]
+    for col, col_type in colonne_report:
         try:
             cursor.execute(f"ALTER TABLE impostazioni_report ADD COLUMN {col} {col_type}")
         except Exception:
@@ -124,8 +137,17 @@ def inizializza_db():
 
     cursor.execute("SELECT COUNT(*) FROM impostazioni_report")
     if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO impostazioni_report (intestazione, condizioni_standard, note_pie_pagina, colore_primario, mostra_firme, mostra_pie) VALUES (?, ?, ?, ?, ?, ?)", 
-                       ("Agenda Cardinali - Servizi Tecnici e Professionali", "Si certifica che i lavori sono stati eseguiti a regola d'arte. Salvo approvazione finale.", "Grazie per aver scelto i nostri servizi.", "#1976D2", 1, 1))
+        cursor.execute("""
+            INSERT INTO impostazioni_report 
+            (ragione_sociale, p_iva, indirizzo_az, tel_az, email_az, intestazione, condizioni_standard, note_pie_pagina, colore_primario, mostra_firme, mostra_pie, mostra_materiali, mostra_garanzia, margine_stretto) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            "Agenda Cardinali S.R.L.", "P.IVA 01234567890", "Via Roma 1, Firenze", "+39 055 123456", "info@agendacardinali.it",
+            "RAPPORTO DI INTERVENTO TECNICO", 
+            "Si certifica che i lavori sono stati eseguiti a regola d'arte. Salvo approvazione finale.", 
+            "Documento emesso da Agenda Cardinali - Tutti i diritti riservati.", 
+            "#1976D2", 1, 1, 1, 1, 0
+        ))
         
     conn.commit()
     conn.close()
@@ -188,14 +210,30 @@ def get_gruppi_list():
 def get_template_report():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT intestazione, condizioni_standard, note_pie_pagina, colore_primario, mostra_firme, mostra_pie FROM impostazioni_report LIMIT 1")
+    cursor.execute("""
+        SELECT ragione_sociale, p_iva, indirizzo_az, tel_az, email_az, 
+               intestazione, condizioni_standard, note_pie_pagina, 
+               colore_primario, mostra_firme, mostra_pie, mostra_materiali, mostra_garanzia, margine_stretto 
+        FROM impostazioni_report LIMIT 1
+    """)
     res = cursor.fetchone()
     conn.close()
-    return res if res else ("Agenda Cardinali", "Condizioni standard...", "Note piè di pagina...", "#1976D2", 1, 1)
+    if res:
+        return res
+    else:
+        return ("Agenda Cardinali S.R.L.", "P.IVA 01234567890", "Via Roma 1", "055123456", "info@test.it", 
+                "RAPPORTO DI INTERVENTO", "Condizioni standard...", "Piè di pagina...", "#1976D2", 1, 1, 1, 1, 0)
 
-def genera_pdf_report(intestazione, cliente, titolo, tecnico, dettagli, condizioni, nota_chiusura, pie, colore_primario="#1976D2", mostra_firme=1, mostra_pie=1):
+# Generatore PDF Avanzato (Report Designer Engine)
+def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
+                      intestazione, cliente, titolo, tecnico, dettagli, 
+                      condizioni, nota_chiusura, pie, 
+                      colore_primario="#1976D2", mostra_firme=1, mostra_pie=1, 
+                      mostra_materiali=1, mostra_garanzia=1, margine_stretto=0):
+    
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+    margine = 20 if margine_stretto else 30
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=margine, leftMargin=margine, topMargin=margine, bottomMargin=margine)
     elements = []
     
     try:
@@ -204,53 +242,90 @@ def genera_pdf_report(intestazione, cliente, titolo, tecnico, dettagli, condizio
         main_color = colors.HexColor('#1976D2')
 
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=main_color, spaceAfter=10)
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, textColor=main_color, spaceAfter=4)
+    company_style = ParagraphStyle('CompanyStyle', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#555555'), spaceAfter=2)
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#333333'), spaceAfter=6)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=colors.HexColor('#111111'))
     
-    elements.append(Paragraph(f"<b>{intestazione}</b>", title_style))
-    elements.append(HRFlowable(width="100%", thickness=1.5, color=main_color, spaceAfter=15))
+    # 1. Intestazione Aziendale
+    data_header = [
+        [
+            Paragraph(f"<b>{ragione_sociale}</b><br/><font size=8>P.IVA: {p_iva} | Indirizzo: {indirizzo_az}<br/>Tel: {tel_az} | Email: {email_az}</font>", company_style),
+            Paragraph(f"<b>{intestazione}</b>", ParagraphStyle('SubH', parent=title_style, alignment=2))
+        ]
+    ]
+    t_header = Table(data_header, colWidths=[270, 270])
+    t_header.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+    ]))
+    elements.append(t_header)
+    elements.append(HRFlowable(width="100%", thickness=2, color=main_color, spaceAfter=12))
     
+    # 2. Dati Cliente e Intervento
     data_info = [
         [Paragraph(f"<b>Cliente:</b> {cliente}", normal_style), Paragraph(f"<b>Data Report:</b> {datetime.date.today()}", normal_style)],
-        [Paragraph(f"<b>Attività:</b> {titolo}", normal_style), Paragraph(f"<b>Tecnico:</b> {tecnico}", normal_style)]
+        [Paragraph(f"<b>Oggetto:</b> {titolo}", normal_style), Paragraph(f"<b>Tecnico Incaricato:</b> {tecnico}", normal_style)]
     ]
     t_info = Table(data_info, colWidths=[270, 270])
     t_info.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F5F5F5')),
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8F9FA')),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.HexColor('#DDDDDD')),
         ('PADDING', (0,0), (-1,-1), 8),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
     elements.append(t_info)
-    elements.append(Spacer(1, 15))
+    elements.append(Spacer(1, 12))
     
-    elements.append(Paragraph("<b>Dettaglio Interventi e Lavorazioni Eseguite:</b>", bold_style))
-    elements.append(Spacer(1, 5))
+    # 3. Dettaglio Lavorazioni
+    elements.append(Paragraph("<b>Dettaglio Interventi e Attività Eseguite:</b>", bold_style))
+    elements.append(Spacer(1, 4))
     elements.append(Paragraph(dettagli.replace('\n', '<br/>'), normal_style))
-    elements.append(Spacer(1, 15))
+    elements.append(Spacer(1, 10))
     
-    elements.append(Paragraph("<b>Note di Chiusura e Condizioni:</b>", bold_style))
+    # 4. Sezione Modulare: Materiali Utilizzati (Opzionale)
+    if mostra_materiali:
+        elements.append(Paragraph("<b>Materiali e Ricambi Utilizzati:</b>", bold_style))
+        data_mat = [
+            [Paragraph("<b>Codice / Descrizione Materiale</b>", bold_style), Paragraph("<b>Quantità</b>", bold_style)],
+            [Paragraph("- Nessun materiale extra registrato / Incluso nell'intervento", normal_style), Paragraph("-", normal_style)]
+        ]
+        t_mat = Table(data_mat, colWidths=[400, 140])
+        t_mat.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#EEEEEE')),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#DDDDDD')),
+            ('PADDING', (0,0), (-1,-1), 6),
+        ]))
+        elements.append(t_mat)
+        elements.append(Spacer(1, 10))
+    
+    # 5. Note Chiusura e Condizioni di Garanzia
+    elements.append(Paragraph("<b>Esito e Note di Chiusura:</b>", bold_style))
     elements.append(Paragraph(f"<b>Nota Finale:</b> {nota_chiusura}", normal_style))
-    elements.append(Paragraph(f"<i>{condizioni}</i>", normal_style))
     
+    if mostra_garanzia:
+        elements.append(Spacer(1, 4))
+        elements.append(Paragraph(f"<b>Condizioni di Garanzia / Note Legali:</b><br/><i>{condizioni}</i>", normal_style))
+    
+    # 6. Sezione Firme Modulare
     if mostra_firme:
-        elements.append(Spacer(1, 25))
+        elements.append(Spacer(1, 20))
         data_firme = [
-            [Paragraph("<b>Firma Tecnico</b>", normal_style), Paragraph("<b>Firma per Accettazione Cliente</b>", normal_style)],
+            [Paragraph("<b>Firma del Tecnico</b>", normal_style), Paragraph("<b>Firma per Accettazione Cliente</b>", normal_style)],
             [Paragraph("<br/><br/>___________________________", normal_style), Paragraph("<br/><br/>___________________________", normal_style)]
         ]
         t_firme = Table(data_firme, colWidths=[270, 270])
         t_firme.setStyle(TableStyle([
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('PADDING', (0,0), (-1,-1), 5),
+            ('PADDING', (0,0), (-1,-1), 4),
         ]))
         elements.append(t_firme)
     
+    # 7. Piè di pagina Legale
     if mostra_pie and pie:
-        elements.append(Spacer(1, 30))
-        elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CCCCCC'), spaceAfter=5))
-        elements.append(Paragraph(f"<font size=8 color='#777777'>{pie}</font>", normal_style))
+        elements.append(Spacer(1, 25))
+        elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CCCCCC'), spaceAfter=4))
+        elements.append(Paragraph(f"<font size=7 color='#777777'>{pie}</font>", normal_style))
     
     doc.build(elements)
     buffer.seek(0)
@@ -497,7 +572,7 @@ if menu == "📅 Planning Principale":
                         nuova_riga = f"• [Inizio: {data_inz} {ora_inz} | Fine: {data_fin} {ora_fin}] {testo_lav}"
                         
                         if modalita == "Sovrascrivi tutto" or not r[10]:
-                            stringa_aggiornata = nueva_riga if 'nueva_riga' in locals() else nuova_riga
+                            stringa_aggiornata = nuova_riga
                         else:
                             stringa_aggiornata = r[10] + "\n" + nuova_riga
                             
@@ -513,19 +588,21 @@ if menu == "📅 Planning Principale":
                         st.session_state[f"open_interventi_{r[0]}"] = False
                         st.rerun()
 
-            # MODULO CHIUSURA E REPORT DESIGN PDF INTERATTIVO
+            # MODULO CHIUSURA E REPORT DESIGN AVANZATO
             if st.session_state.get(f"open_chiusura_{r[0]}", False):
-                tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo = get_template_report()
+                (rag_soc, piva, ind_az, tel_az, email_az, 
+                 tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo, 
+                 tpl_mat, tpl_gar, tpl_margine) = get_template_report()
 
                 st.markdown(f"""
                     <div style="background-color: rgba(33, 150, 243, 0.1); padding: 15px; border-radius: 8px; border: 1px solid #2196F3; margin-bottom: 10px;">
-                        <h4>🎨 Editor Grafico Rapporto di Intervento - #{r[0]}</h4>
-                        <p>Personalizza i dati per questo specifico intervento prima di generare il PDF definitivo.</p>
+                        <h4>🎨 Report Designer & Chiusura - #{r[0]}</h4>
+                        <p>Personalizza i dati per questo specifico intervento prima di generare il PDF professionale.</p>
                     </div>
                 """, unsafe_allow_html=True)
 
                 with st.form(f"form_chiusura_{r[0]}"):
-                    rep_intestazione = st.text_input("Intestazione Aziendale", value=tpl_i)
+                    rep_intestazione = st.text_input("Titolo Rapporto", value=tpl_i)
                     rep_cliente = st.text_input("Cliente", value=r[4] or "")
                     rep_titolo = st.text_input("Titolo Attività", value=r[3])
                     rep_tecnico = st.text_input("Tecnico Assegnato", value=r[5] or "")
@@ -533,7 +610,7 @@ if menu == "📅 Planning Principale":
                     st.markdown("##### Dettaglio Lavorazioni (Editabile per il PDF):")
                     rep_dettagli = st.text_area("Elenco Interventi", value=r[10] or "Nessun dettaglio inserito", height=120)
                     
-                    rep_condizioni = st.text_area("Condizioni e Note Standard", value=tpl_c, height=80)
+                    rep_condizioni = st.text_area("Condizioni e Garanzia", value=tpl_c, height=80)
                     rep_nota = st.text_area("Nota finale di chiusura *", value="")
                     rep_pie = st.text_input("Piè di pagina", value=tpl_pie)
                     
@@ -558,9 +635,11 @@ if menu == "📅 Planning Principale":
                             conn.close()
                             
                             pdf_buffer = genera_pdf_report(
+                                rag_soc, piva, ind_az, tel_az, email_az,
                                 rep_intestazione, rep_cliente, rep_titolo, rep_tecnico, 
                                 rep_dettagli, rep_condizioni, rep_nota, rep_pie,
-                                colore_primario=tpl_colore, mostra_firme=tpl_firme, mostra_pie=tpl_pie_attivo
+                                colore_primario=tpl_colore, mostra_firme=tpl_firme, mostra_pie=tpl_pie_attivo,
+                                mostra_materiali=tpl_mat, mostra_garanzia=tpl_gar, margine_stretto=tpl_margine
                             )
                             st.session_state[f"pdf_data_{r[0]}"] = pdf_buffer.getvalue()
                             
@@ -690,10 +769,15 @@ elif menu == "📁 Archivio Storico":
                     st.rerun()
             with c_arc2:
                 if st.button("📄 Ristampa PDF", key=f"pdf_arch_{r[0]}"):
-                    tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo = get_template_report()
+                    (rag_soc, piva, ind_az, tel_az, email_az, 
+                     tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo, 
+                     tpl_mat, tpl_gar, tpl_margine) = get_template_report()
+                    
                     pdf_buf = genera_pdf_report(
+                        rag_soc, piva, ind_az, tel_az, email_az,
                         tpl_i, r[4], r[3], r[5], r[10] or "", tpl_c, r[11] or "", tpl_pie,
-                        colore_primario=tpl_colore, mostra_firme=tpl_firme, mostra_pie=tpl_pie_attivo
+                        colore_primario=tpl_colore, mostra_firme=tpl_firme, mostra_pie=tpl_pie_attivo,
+                        mostra_materiali=tpl_mat, mostra_garanzia=tpl_gar, margine_stretto=tpl_margine
                     )
                     st.download_button(
                         label=f"📥 Scarica PDF #{r[0]}",
@@ -1051,38 +1135,62 @@ elif menu == "🏢 Gestione Gruppi":
         else:
             st.info("Nessun gruppo registrato.")
 
-# ==================== SEZIONE 6: CONFIGURA REPORT (GRAFICO & DEFAULT) ====================
+# ==================== SEZIONE 6: CONFIGURA REPORT (REPORT DESIGNER AVANZATO) ====================
 elif menu == "⚙️ Configura Report":
-    st.title("⚙️ Editor Grafico e Modello Report di Default")
-    st.markdown("Personalizza l'aspetto visivo (colori, sezioni, firme) e i testi predefiniti dei tuoi PDF di intervento.")
+    st.title("⚙️ Report Designer - Editor Moduli e Layout PDF")
+    st.markdown("Configura in modo professionale l'intestazione aziendale, i blocchi strutturali, i colori e le sezioni dei tuoi rapporti di intervento.")
 
-    tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo = get_template_report()
+    (rag_soc, piva, ind_az, tel_az, email_az, 
+     tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo, 
+     tpl_mat, tpl_gar, tpl_margine) = get_template_report()
 
     with st.form("form_config_report"):
-        st.subheader("🎨 Personalizzazione Grafica del Layout PDF")
-        
-        c_conf1, c_conf2 = st.columns(2)
-        with c_conf1:
+        st.subheader("🏢 1. Anagrafica e Intestazione Aziendale")
+        c_az1, c_az2, c_az3 = st.columns(3)
+        with c_az1:
+            cfg_rag_soc = st.text_input("Ragione Sociale Azienda", value=rag_soc or "")
+            cfg_piva = st.text_input("Partita IVA / Codice Fiscale", value=piva or "")
+        with c_az2:
+            cfg_ind = st.text_input("Indirizzo Sede", value=ind_az or "")
+            cfg_tel = st.text_input("Telefono Aziendale", value=tel_az or "")
+        with c_az3:
+            cfg_email = st.text_input("Email Aziendale", value=email_az or "")
+            cfg_titolo_rep = st.text_input("Titolo Predefinito del Report", value=tpl_i or "")
+
+        st.divider()
+        st.subheader("🎨 2. Design Visivo e Margini")
+        c_ds1, c_ds2 = st.columns(2)
+        with c_ds1:
             try:
                 colore_iniziale = tpl_colore if tpl_colore.startswith("#") and len(tpl_colore) == 7 else "#1976D2"
             except:
                 colore_iniziale = "#1976D2"
-                
-            nuovo_colore = st.color_picker("Colore Principale del Report (Intestazioni e Linee)", value=colore_iniziale)
-        with c_conf2:
+            cfg_colore = st.color_picker("Colore Principale (Accento Grafico)", value=colore_iniziale)
+        with c_ds2:
             st.markdown("<br>", unsafe_allow_html=True)
-            nuovo_mostra_firme = st.checkbox("Includi sezione Firme (Tecnico e Cliente)", value=bool(tpl_firme))
-            nuovo_mostra_pie = st.checkbox("Includi Piè di pagina legale", value=bool(tpl_pie_attivo))
+            cfg_margine = st.checkbox("Utilizza margini stretti nel foglio", value=bool(tpl_margine))
 
         st.divider()
-        st.subheader("📝 Contenuti e Testi Standard")
-        nuova_intestazione = st.text_input("Intestazione Aziendale / Titolo Report", value=tpl_i)
-        nuove_condizioni = st.text_area("Condizioni Generali / Note Legali Standard", value=tpl_c, height=100)
-        nuovo_pie = st.text_input("Testo Piè di Pagina Standard", value=tpl_pie)
+        st.subheader("🧩 3. Sezioni Modulari del PDF")
+        c_mod1, c_mod2, c_mod3, c_mod4 = st.columns(4)
+        with c_mod1:
+            cfg_firme = st.checkbox("Blocco Firme", value=bool(tpl_firme))
+        with c_mod2:
+            cfg_pie_attivo = st.checkbox("Piè di pagina Legale", value=bool(tpl_pie_attivo))
+        with c_mod3:
+            cfg_mat = st.checkbox("Tabella Materiali", value=bool(tpl_mat))
+        with c_mod4:
+            cfg_gar = st.checkbox("Box Condizioni/Garanzia", value=bool(tpl_gar))
 
+        st.divider()
+        st.subheader("📝 4. Testi Standard e Condizioni Legali")
+        cfg_condizioni = st.text_area("Condizioni Generali / Garanzia Standard", value=tpl_c or "", height=90)
+        cfg_pie = st.text_input("Testo Piè di Pagina Standard", value=tpl_pie or "")
+
+        st.markdown("<br>", unsafe_allow_html=True)
         c_r1, c_r2 = st.columns(2)
         with c_r1:
-            salva_tpl = st.form_submit_button("💾 Salva Configurazione Grafica e Modello", use_container_width=True)
+            salva_tpl = st.form_submit_button("💾 Salva Designer e Modello Globale", use_container_width=True)
         with c_r2:
             annulla_tpl = st.form_submit_button("❌ Annulla", use_container_width=True)
 
@@ -1092,12 +1200,20 @@ elif menu == "⚙️ Configura Report":
             cursor.execute("DELETE FROM impostazioni_report")
             cursor.execute("""
                 INSERT INTO impostazioni_report 
-                (intestazione, condizioni_standard, note_pie_pagina, colore_primario, mostra_firme, mostra_pie) 
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (nuova_intestazione, nuove_condizioni, nuovo_pie, nuovo_colore, int(nuovo_mostra_firme), int(nuovo_mostra_pie)))
+                (ragione_sociale, p_iva, indirizzo_az, tel_az, email_az, 
+                 intestazione, condizioni_standard, note_pie_pagina, 
+                 colore_primario, mostra_firme, mostra_pie, 
+                 mostra_materiali, mostra_garanzia, margine_stretto) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                cfg_rag_soc, cfg_piva, cfg_ind, cfg_tel, cfg_email,
+                cfg_titolo_rep, cfg_condizioni, cfg_pie,
+                cfg_colore, int(cfg_firme), int(cfg_pie_attivo),
+                int(cfg_mat), int(cfg_gar), int(cfg_margine)
+            ))
             conn.commit()
             conn.close()
-            st.success("Configurazione grafica e modello di report salvati con successo!")
+            st.success("Configurazione del Report Designer salvata con successo!")
             st.rerun()
         if annulla_tpl:
             st.info("Operazione annullata.")
