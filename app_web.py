@@ -85,7 +85,7 @@ def inizializza_db():
         )
     ''')
     
-    # Tabella per il Report Designer Avanzato (Visual Layout Engine)
+    # Tabella per il Report Designer Avanzato
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS impostazioni_report (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1201,48 +1201,69 @@ elif menu == "⚙️ Configura Report":
     with col_preview:
         st.subheader("👁️ Live Preview Visiva del PDF")
         
-        # Anteprima HTML/CSS dinamica basata sulle scelte dell'utente
-        prev_firme = "<tr><td style='border-top: 1px solid #333; padding-top: 10px; font-size:11px;'><b>Firma Tecnico</b></td><td style='border-top: 1px solid #333; padding-top: 10px; font-size:11px;'><b>Firma Cliente</b></td></tr>" if cfg_firme else ""
-        prev_mat = f"<div style='background:#f4f4f4; padding:6px; margin:6px 0; font-size:11px; border:1px solid #ddd;'><b>Tabella Materiali:</b> Inclusa (Attiva)</div>" if cfg_mat else ""
-        prev_gar = f"<div style='font-size:10px; color:#555; margin-top:6px;'><i>Garanzia: {cfg_condizioni}</i></div>" if cfg_gar else ""
-        prev_pie = f"<div style='font-size:9px; color:#777; border-top:1px solid #eee; margin-top:15px; padding-top:4px; text-align:center;'>{cfg_pie}</div>" if cfg_pie_attivo else ""
+        prev_firme = """
+            <table style="width: 100%; margin-top: 30px;">
+                <tr>
+                    <td style="border-top: 1px solid #333; padding-top: 8px; font-size:11px; width: 50%;"><b>Firma del Tecnico</b></td>
+                    <td style="border-top: 1px solid #333; padding-top: 8px; font-size:11px; width: 50%;"><b>Firma per Accettazione Cliente</b></td>
+                </tr>
+            </table>
+        """ if cfg_firme else ""
 
-        st.markdown(f"""
-            <div style="border: 2px solid #ccc; border-radius: 8px; padding: 25px; background: white; color: #333; box-shadow: 0 4px 12px rgba(0,0,0,0.1); font-family: Helvetica, sans-serif;">
-                <div style="display: flex; justify-content: space-between; border-bottom: 2px solid {cfg_colore}; padding-bottom: 10px; margin-bottom: 12px;">
+        prev_mat = """
+            <div style="background:#f1f3f4; padding:8px; margin:8px 0; font-size:11px; border:1px solid #ddd; border-radius: 4px;">
+                <b>Tabella Materiali e Ricambi:</b><br>
+                <span style="color: #666; font-size: 10px;">- Materiale standard incluso nell'intervento</span>
+            </div>
+        """ if cfg_mat else ""
+
+        prev_gar = f"""
+            <div style="font-size:10px; color:#555; margin-top:10px; background: #fafafa; padding: 6px; border-left: 3px solid {cfg_colore};">
+                <b>Condizioni di Garanzia:</b> {cfg_condizioni}
+            </div>
+        """ if cfg_gar else ""
+
+        prev_pie = f"""
+            <div style="font-size:9px; color:#777; border-top:1px solid #eee; margin-top:20px; padding-top:6px; text-align:center;">
+                {cfg_pie}
+            </div>
+        """ if cfg_pie_attivo else ""
+
+        preview_html = f"""
+            <div style="border: 1px solid #ccc; border-radius: 6px; padding: 20px; background: #ffffff; color: #333; font-family: Arial, sans-serif; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <div style="display: flex; justify-content: space-between; border-bottom: 2px solid {cfg_colore}; padding-bottom: 8px; margin-bottom: 12px;">
                     <div>
-                        <h3 style="margin: 0; color: {cfg_colore}; font-size: 16px;">{cfg_rag_soc}</h3>
-                        <p style="margin: 2px 0 0 0; font-size: 10px; color: #666;">P.IVA: {cfg_piva} | {cfg_ind}<br>Tel: {cfg_tel} | {cfg_email}</p>
+                        <div style="font-weight: bold; font-size: 15px; color: {cfg_colore};">{cfg_rag_soc or 'Nome Azienda'}</div>
+                        <div style="font-size: 9px; color: #555; margin-top: 2px;">P.IVA: {cfg_piva} | {cfg_ind}<br>Tel: {cfg_tel} | {cfg_email}</div>
                     </div>
                     <div style="text-align: right;">
-                        <h4 style="margin: 0; color: {cfg_colore}; font-size: 14px;">{cfg_titolo_rep}</h4>
-                        <span style="font-size: 9px; color: #888;">Data: {datetime.date.today()}</span>
+                        <div style="font-weight: bold; font-size: 13px; color: {cfg_colore};">{cfg_titolo_rep}</div>
+                        <div style="font-size: 9px; color: #777;">Data: {datetime.date.today()}</div>
                     </div>
                 </div>
                 
-                <div style="background: #f9f9f9; padding: 8px; border-radius: 4px; font-size: 11px; margin-bottom: 10px; border: 1px solid #eee;">
-                    <b>Cliente:</b> Rossi S.R.L. &nbsp;|&nbsp; <b>Tecnico:</b> Mario Rossi<br>
-                    <b>Oggetto:</b> Intervento di manutenzione straordinaria impianto
+                <div style="background: #f8f9fa; padding: 8px; border-radius: 4px; font-size: 11px; margin-bottom: 10px; border: 1px solid #e9ecef;">
+                    <b>Cliente:</b> Mario Rossi (Esempio S.R.L.)<br>
+                    <b>Tecnico Incaricato:</b> Luigi Bianchi<br>
+                    <b>Oggetto:</b> Manutenzione straordinaria impianto
                 </div>
                 
-                <div style="font-size: 11px; margin-bottom: 8px;">
-                    <b>Dettaglio Lavorazioni:</b><br>
-                    - Controllo generale e verifica componenti.<br>
-                    - Sostituzione parti usurate e collaudo finale.
+                <div style="font-size: 11px; margin-bottom: 8px; line-height: 1.4;">
+                    <b>Dettaglio Interventi Eseguiti:</b><br>
+                    • Verifica generale delle componenti elettriche e meccaniche.<br>
+                    • Soluzioni applicate e collaudo finale eseguito con successo.
                 </div>
                 
                 {prev_mat}
                 
                 <div style="font-size: 11px; margin-top: 8px;">
-                    <b>Nota Chiusura:</b> Intervento completato regolarmente.
+                    <b>Nota Chiusura:</b> Intervento completato a regola d'arte.
                 </div>
                 
                 {prev_gar}
-                
-                <table style="width: 100%; margin-top: 25px;">
-                    {prev_firme}
-                </table>
-                
+                {prev_firme}
                 {prev_pie}
             </div>
-        """, unsafe_allow_html=True)
+        """
+
+        st.markdown(preview_html, unsafe_allow_html=True)
