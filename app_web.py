@@ -224,7 +224,6 @@ def get_template_report():
         return ("Agenda Cardinali S.R.L.", "P.IVA 01234567890", "Via Roma 1", "055123456", "info@test.it", 
                 "RAPPORTO DI INTERVENTO", "Condizioni standard...", "Piè di pagina...", "#1976D2", 1, 1, 1, 1, 0)
 
-# Generatore PDF Avanzato (Report Designer Engine)
 def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
                       intestazione, cliente, titolo, tecnico, dettagli, 
                       condizioni, nota_chiusura, pie, 
@@ -247,7 +246,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#333333'), spaceAfter=6)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold', textColor=colors.HexColor('#111111'))
     
-    # 1. Intestazione Aziendale
     data_header = [
         [
             Paragraph(f"<b>{ragione_sociale}</b><br/><font size=8>P.IVA: {p_iva} | Indirizzo: {indirizzo_az}<br/>Tel: {tel_az} | Email: {email_az}</font>", company_style),
@@ -262,7 +260,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
     elements.append(t_header)
     elements.append(HRFlowable(width="100%", thickness=2, color=main_color, spaceAfter=12))
     
-    # 2. Dati Cliente e Intervento
     data_info = [
         [Paragraph(f"<b>Cliente:</b> {cliente}", normal_style), Paragraph(f"<b>Data Report:</b> {datetime.date.today()}", normal_style)],
         [Paragraph(f"<b>Oggetto:</b> {titolo}", normal_style), Paragraph(f"<b>Tecnico Incaricato:</b> {tecnico}", normal_style)]
@@ -277,13 +274,11 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
     elements.append(t_info)
     elements.append(Spacer(1, 12))
     
-    # 3. Dettaglio Lavorazioni
     elements.append(Paragraph("<b>Dettaglio Interventi e Attività Eseguite:</b>", bold_style))
     elements.append(Spacer(1, 4))
     elements.append(Paragraph(dettagli.replace('\n', '<br/>'), normal_style))
     elements.append(Spacer(1, 10))
     
-    # 4. Sezione Modulare: Materiali Utilizzati (Opzionale)
     if mostra_materiali:
         elements.append(Paragraph("<b>Materiali e Ricambi Utilizzati:</b>", bold_style))
         data_mat = [
@@ -299,7 +294,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
         elements.append(t_mat)
         elements.append(Spacer(1, 10))
     
-    # 5. Note Chiusura e Condizioni di Garanzia
     elements.append(Paragraph("<b>Esito e Note di Chiusura:</b>", bold_style))
     elements.append(Paragraph(f"<b>Nota Finale:</b> {nota_chiusura}", normal_style))
     
@@ -307,7 +301,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
         elements.append(Spacer(1, 4))
         elements.append(Paragraph(f"<b>Condizioni di Garanzia / Note Legali:</b><br/><i>{condizioni}</i>", normal_style))
     
-    # 6. Sezione Firme Modulare
     if mostra_firme:
         elements.append(Spacer(1, 20))
         data_firme = [
@@ -321,7 +314,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
         ]))
         elements.append(t_firme)
     
-    # 7. Piè di pagina Legale
     if mostra_pie and pie:
         elements.append(Spacer(1, 25))
         elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CCCCCC'), spaceAfter=4))
@@ -334,7 +326,6 @@ def genera_pdf_report(ragione_sociale, p_iva, indirizzo_az, tel_az, email_az,
 if 'menu_selezionato' not in st.session_state:
     st.session_state.menu_selezionato = "📅 Planning Principale"
 
-# ==================== MENU LATERALE COMPATTO ====================
 st.sidebar.title(f"📅 {NOME_DITTA}")
 st.sidebar.markdown(f"👤 Utente: **{st.session_state.utente_corrente}** (*{st.session_state.gruppo_corrente}*)")
 if st.sidebar.button("🚪 Logout", use_container_width=True):
@@ -394,7 +385,6 @@ if count_urgenti > 0:
 
 menu = st.session_state.menu_selezionato
 
-# ==================== SEZIONE 1: PLANNING ====================
 if menu == "📅 Planning Principale":
     st.title("📅 Planning Attività e Urgenze")
     
@@ -588,7 +578,6 @@ if menu == "📅 Planning Principale":
                         st.session_state[f"open_interventi_{r[0]}"] = False
                         st.rerun()
 
-            # MODULO CHIUSURA E REPORT DESIGN AVANZATO
             if st.session_state.get(f"open_chiusura_{r[0]}", False):
                 (rag_soc, piva, ind_az, tel_az, email_az, 
                  tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo, 
@@ -705,9 +694,7 @@ if menu == "📅 Planning Principale":
             st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
     else:
         st.info("Nessuna attività attiva trovata.")
-
-# ==================== SEZIONE 2: ARCHIVIO STORICO ====================
-elif menu == "📁 Archivio Storico":
+        elif menu == "📁 Archivio Storico":
     st.title("📁 Archivio Storico Interventi")
     
     arc_h1, arc_h2 = st.columns([4, 1])
@@ -790,7 +777,6 @@ elif menu == "📁 Archivio Storico":
     else:
         st.info("L'archivio storico è vuoto.")
 
-# ==================== SEZIONE 3: CLIENTI ====================
 elif menu == "👥 Gestione Clienti":
     st.title("👥 Gestione e Anagrafica Clienti")
     
@@ -814,7 +800,7 @@ elif menu == "👥 Gestione Clienti":
 
             if sub_cli:
                 if not cli_nome:
-                    st.warning("Il nome azienda è obbligatorio.")
+                    st.warning(" Il nome azienda è obbligatorio.")
                 else:
                     conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
@@ -924,7 +910,6 @@ elif menu == "👥 Gestione Clienti":
         else:
             st.info("Nessun cliente registrato.")
 
-# ==================== SEZIONE 4: UTENTI / TECNICI ====================
 elif menu == "🛠️ Gestione Tecnici / Utenti":
     st.title("🛠️ Gestione Utenti e Mansioni (Tecnici)")
     st.markdown("La mansione del tecnico è determinata direttamente dal **Gruppo** di appartenenza.")
@@ -1038,7 +1023,6 @@ elif menu == "🛠️ Gestione Tecnici / Utenti":
         else:
             st.info("Nessun utente registrato.")
 
-# ==================== SEZIONE 5: GESTIONE GRUPPI ====================
 elif menu == "🏢 Gestione Gruppi":
     st.title("🏢 Gestione Gruppi e Mansioni")
     
@@ -1135,7 +1119,6 @@ elif menu == "🏢 Gestione Gruppi":
         else:
             st.info("Nessun gruppo registrato.")
 
-# ==================== SEZIONE 6: CONFIGURA REPORT (REPORT DESIGNER AVANZATO) ====================
 elif menu == "⚙️ Configura Report":
     st.title("⚙️ Report Designer - Editor Moduli e Layout PDF")
     st.markdown("Configura in modo professionale l'intestazione aziendale, i blocchi strutturali, i colori e le sezioni dei tuoi rapporti di intervento.")
