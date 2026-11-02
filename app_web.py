@@ -85,7 +85,7 @@ def inizializza_db():
         )
     ''')
     
-    # Tabella per il Report Designer Avanzato
+    # Tabella per il Report Designer Avanzato (Visual Layout Engine)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS impostazioni_report (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1135,86 +1135,114 @@ elif menu == "🏢 Gestione Gruppi":
         else:
             st.info("Nessun gruppo registrato.")
 
-# ==================== SEZIONE 6: CONFIGURA REPORT (REPORT DESIGNER AVANZATO) ====================
+# ==================== SEZIONE 6: CONFIGURA REPORT (REPORT DESIGNER VISIVO & LIVE PREVIEW) ====================
 elif menu == "⚙️ Configura Report":
-    st.title("⚙️ Report Designer - Editor Moduli e Layout PDF")
-    st.markdown("Configura in modo professionale l'intestazione aziendale, i blocchi strutturali, i colori e le sezioni dei tuoi rapporti di intervento.")
+    st.title("⚙️ Report Designer Visivo & Live Preview")
+    st.markdown("Modifica lo stile grafico e vedi in tempo reale l'anteprima esatta di come apparirà il PDF stampato.")
 
     (rag_soc, piva, ind_az, tel_az, email_az, 
      tpl_i, tpl_c, tpl_pie, tpl_colore, tpl_firme, tpl_pie_attivo, 
      tpl_mat, tpl_gar, tpl_margine) = get_template_report()
 
-    with st.form("form_config_report"):
-        st.subheader("🏢 1. Anagrafica e Intestazione Aziendale")
-        c_az1, c_az2, c_az3 = st.columns(3)
-        with c_az1:
-            cfg_rag_soc = st.text_input("Ragione Sociale Azienda", value=rag_soc or "")
-            cfg_piva = st.text_input("Partita IVA / Codice Fiscale", value=piva or "")
-        with c_az2:
-            cfg_ind = st.text_input("Indirizzo Sede", value=ind_az or "")
-            cfg_tel = st.text_input("Telefono Aziendale", value=tel_az or "")
-        with c_az3:
-            cfg_email = st.text_input("Email Aziendale", value=email_az or "")
-            cfg_titolo_rep = st.text_input("Titolo Predefinito del Report", value=tpl_i or "")
+    col_editor, col_preview = st.columns([1, 1], gap="large")
 
-        st.divider()
-        st.subheader("🎨 2. Design Visivo e Margini")
-        c_ds1, c_ds2 = st.columns(2)
-        with c_ds1:
+    with col_editor:
+        st.subheader("🛠️ Personalizzazione Blocchi")
+        with st.form("form_config_report"):
+            cfg_rag_soc = st.text_input("Ragione Sociale Azienda", value=rag_soc or "")
+            cfg_piva = st.text_input("Partita IVA", value=piva or "")
+            cfg_ind = st.text_input("Indirizzo", value=ind_az or "")
+            cfg_tel = st.text_input("Telefono", value=tel_az or "")
+            cfg_email = st.text_input("Email", value=email_az or "")
+            cfg_titolo_rep = st.text_input("Titolo Rapporto PDF", value=tpl_i or "")
+            
             try:
                 colore_iniziale = tpl_colore if tpl_colore.startswith("#") and len(tpl_colore) == 7 else "#1976D2"
             except:
                 colore_iniziale = "#1976D2"
             cfg_colore = st.color_picker("Colore Principale (Accento Grafico)", value=colore_iniziale)
-        with c_ds2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            cfg_margine = st.checkbox("Utilizza margini stretti nel foglio", value=bool(tpl_margine))
+            
+            st.markdown("---")
+            st.markdown("##### Sezioni Visibili nel PDF:")
+            cfg_firme = st.checkbox("Mostra Blocco Firme", value=bool(tpl_firme))
+            cfg_pie_attivo = st.checkbox("Mostra Piè di pagina Legale", value=bool(tpl_pie_attivo))
+            cfg_mat = st.checkbox("Mostra Tabella Materiali", value=bool(tpl_mat))
+            cfg_gar = st.checkbox("Mostra Box Condizioni / Garanzia", value=bool(tpl_gar))
+            cfg_margine = st.checkbox("Utilizza Margini Stretti nel Foglio", value=bool(tpl_margine))
 
-        st.divider()
-        st.subheader("🧩 3. Sezioni Modulari del PDF")
-        c_mod1, c_mod2, c_mod3, c_mod4 = st.columns(4)
-        with c_mod1:
-            cfg_firme = st.checkbox("Blocco Firme", value=bool(tpl_firme))
-        with c_mod2:
-            cfg_pie_attivo = st.checkbox("Piè di pagina Legale", value=bool(tpl_pie_attivo))
-        with c_mod3:
-            cfg_mat = st.checkbox("Tabella Materiali", value=bool(tpl_mat))
-        with c_mod4:
-            cfg_gar = st.checkbox("Box Condizioni/Garanzia", value=bool(tpl_gar))
+            st.markdown("---")
+            cfg_condizioni = st.text_area("Condizioni Generali / Garanzia", value=tpl_c or "", height=80)
+            cfg_pie = st.text_input("Testo Piè di Pagina", value=tpl_pie or "")
 
-        st.divider()
-        st.subheader("📝 4. Testi Standard e Condizioni Legali")
-        cfg_condizioni = st.text_area("Condizioni Generali / Garanzia Standard", value=tpl_c or "", height=90)
-        cfg_pie = st.text_input("Testo Piè di Pagina Standard", value=tpl_pie or "")
+            salva_tpl = st.form_submit_button("💾 Salva Modifiche Globali Report", use_container_width=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        c_r1, c_r2 = st.columns(2)
-        with c_r1:
-            salva_tpl = st.form_submit_button("💾 Salva Designer e Modello Globale", use_container_width=True)
-        with c_r2:
-            annulla_tpl = st.form_submit_button("❌ Annulla", use_container_width=True)
+            if salva_tpl:
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM impostazioni_report")
+                cursor.execute("""
+                    INSERT INTO impostazioni_report 
+                    (ragione_sociale, p_iva, indirizzo_az, tel_az, email_az, 
+                     intestazione, condizioni_standard, note_pie_pagina, 
+                     colore_primario, mostra_firme, mostra_pie, 
+                     mostra_materiali, mostra_garanzia, margine_stretto) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    cfg_rag_soc, cfg_piva, cfg_ind, cfg_tel, cfg_email,
+                    cfg_titolo_rep, cfg_condizioni, cfg_pie,
+                    cfg_colore, int(cfg_firme), int(cfg_pie_attivo),
+                    int(cfg_mat), int(cfg_gar), int(cfg_margine)
+                ))
+                conn.commit()
+                conn.close()
+                st.success("Configurazione salvata con successo!")
+                st.rerun()
 
-        if salva_tpl:
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM impostazioni_report")
-            cursor.execute("""
-                INSERT INTO impostazioni_report 
-                (ragione_sociale, p_iva, indirizzo_az, tel_az, email_az, 
-                 intestazione, condizioni_standard, note_pie_pagina, 
-                 colore_primario, mostra_firme, mostra_pie, 
-                 mostra_materiali, mostra_garanzia, margine_stretto) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                cfg_rag_soc, cfg_piva, cfg_ind, cfg_tel, cfg_email,
-                cfg_titolo_rep, cfg_condizioni, cfg_pie,
-                cfg_colore, int(cfg_firme), int(cfg_pie_attivo),
-                int(cfg_mat), int(cfg_gar), int(cfg_margine)
-            ))
-            conn.commit()
-            conn.close()
-            st.success("Configurazione del Report Designer salvata con successo!")
-            st.rerun()
-        if annulla_tpl:
-            st.info("Operazione annullata.")
-            st.rerun()
+    with col_preview:
+        st.subheader("👁️ Live Preview Visiva del PDF")
+        
+        # Anteprima HTML/CSS dinamica basata sulle scelte dell'utente
+        prev_firme = "<tr><td style='border-top: 1px solid #333; padding-top: 10px; font-size:11px;'><b>Firma Tecnico</b></td><td style='border-top: 1px solid #333; padding-top: 10px; font-size:11px;'><b>Firma Cliente</b></td></tr>" if cfg_firme else ""
+        prev_mat = f"<div style='background:#f4f4f4; padding:6px; margin:6px 0; font-size:11px; border:1px solid #ddd;'><b>Tabella Materiali:</b> Inclusa (Attiva)</div>" if cfg_mat else ""
+        prev_gar = f"<div style='font-size:10px; color:#555; margin-top:6px;'><i>Garanzia: {cfg_condizioni}</i></div>" if cfg_gar else ""
+        prev_pie = f"<div style='font-size:9px; color:#777; border-top:1px solid #eee; margin-top:15px; padding-top:4px; text-align:center;'>{cfg_pie}</div>" if cfg_pie_attivo else ""
+
+        st.markdown(f"""
+            <div style="border: 2px solid #ccc; border-radius: 8px; padding: 25px; background: white; color: #333; box-shadow: 0 4px 12px rgba(0,0,0,0.1); font-family: Helvetica, sans-serif;">
+                <div style="display: flex; justify-content: space-between; border-bottom: 2px solid {cfg_colore}; padding-bottom: 10px; margin-bottom: 12px;">
+                    <div>
+                        <h3 style="margin: 0; color: {cfg_colore}; font-size: 16px;">{cfg_rag_soc}</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 10px; color: #666;">P.IVA: {cfg_piva} | {cfg_ind}<br>Tel: {cfg_tel} | {cfg_email}</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <h4 style="margin: 0; color: {cfg_colore}; font-size: 14px;">{cfg_titolo_rep}</h4>
+                        <span style="font-size: 9px; color: #888;">Data: {datetime.date.today()}</span>
+                    </div>
+                </div>
+                
+                <div style="background: #f9f9f9; padding: 8px; border-radius: 4px; font-size: 11px; margin-bottom: 10px; border: 1px solid #eee;">
+                    <b>Cliente:</b> Rossi S.R.L. &nbsp;|&nbsp; <b>Tecnico:</b> Mario Rossi<br>
+                    <b>Oggetto:</b> Intervento di manutenzione straordinaria impianto
+                </div>
+                
+                <div style="font-size: 11px; margin-bottom: 8px;">
+                    <b>Dettaglio Lavorazioni:</b><br>
+                    - Controllo generale e verifica componenti.<br>
+                    - Sostituzione parti usurate e collaudo finale.
+                </div>
+                
+                {prev_mat}
+                
+                <div style="font-size: 11px; margin-top: 8px;">
+                    <b>Nota Chiusura:</b> Intervento completato regolarmente.
+                </div>
+                
+                {prev_gar}
+                
+                <table style="width: 100%; margin-top: 25px;">
+                    {prev_firme}
+                </table>
+                
+                {prev_pie}
+            </div>
+        """, unsafe_allow_html=True)
