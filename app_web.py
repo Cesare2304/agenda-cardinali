@@ -6,7 +6,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-# Importazione per editor di testo avanzato (se presente in requirements.txt)
+# Importazione per editor di testo avanzato (se installato in requirements.txt)
 try:
     from streamlit_quill import st_quill
     HAS_QUILL = True
@@ -107,7 +107,7 @@ def inizializza_db():
         )
     ''')
     
-    # Tabella Impostazioni Report (Designer Professionale)
+    # Tabella Impostazioni Report (Designer Professionale Avanzato)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS impostazioni_report (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -238,7 +238,7 @@ def get_template_report():
         pass
     return ("RAPPORTO DI INTERVENTO", "Helvetica", 10, "#1976D2", "", "Garanzia standard...", "Piè di pagina...")
 
-# Generatore PDF Avanzato con Designer Professionale e Testo Libero
+# Generatore PDF Professionale con layout personalizzabile
 def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     tpl = get_template_report()
     titolo_rep, font_fam, font_sz, colore_p, html_pers, t_gar, t_pie = tpl
@@ -277,7 +277,6 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     elements.append(t_header)
     elements.append(HRFlowable(width="100%", thickness=2, color=main_color, spaceAfter=12))
     
-    # Inserimento del testo libero scritto dall'utente nel Designer Professionale
     if html_pers and html_pers.strip():
         elements.append(Paragraph(html_pers.replace('\n', '<br/>'), normal_style))
         elements.append(Spacer(1, 10))
