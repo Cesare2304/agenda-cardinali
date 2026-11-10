@@ -6,7 +6,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
-# Importazione per editor di testo avanzato (se installato in requirements.txt)
+# Importazione per editor di testo avanzato (se disponibile)
 try:
     from streamlit_quill import st_quill
     HAS_QUILL = True
@@ -107,11 +107,11 @@ def inizializza_db():
         )
     ''')
     
-    # Tabella Impostazioni Report (Designer Professionale Avanzato)
+    # Tabella Impostazioni Report (Template HTML Avanzato)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS impostazioni_report (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titolo_report TEXT DEFAULT 'RAPPORTO DI INTERVENTO',
+            titolo_report TEXT DEFAULT 'RAPPORTO DI INTERVENTO TECNICO',
             font_family TEXT DEFAULT 'Helvetica',
             font_size INTEGER DEFAULT 10,
             colore_primario TEXT DEFAULT '#1976D2',
@@ -122,7 +122,7 @@ def inizializza_db():
     ''')
     
     colonne_report = [
-        ("titolo_report", "TEXT DEFAULT 'RAPPORTO DI INTERVENTO'"),
+        ("titolo_report", "TEXT DEFAULT 'RAPPORTO DI INTERVENTO TECNICO'"),
         ("font_family", "TEXT DEFAULT 'Helvetica'"),
         ("font_size", "INTEGER DEFAULT 10"),
         ("colore_primario", "TEXT DEFAULT '#1976D2'"),
@@ -238,7 +238,7 @@ def get_template_report():
         pass
     return ("RAPPORTO DI INTERVENTO", "Helvetica", 10, "#1976D2", "", "Garanzia standard...", "Piè di pagina...")
 
-# Generatore PDF Professionale con layout personalizzabile
+# Generatore PDF basato su Template HTML Dinamico e Tag di Merge
 def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     tpl = get_template_report()
     titolo_rep, font_fam, font_sz, colore_p, html_pers, t_gar, t_pie = tpl
@@ -277,8 +277,22 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     elements.append(t_header)
     elements.append(HRFlowable(width="100%", thickness=2, color=main_color, spaceAfter=12))
     
+    # Sostituzione dei tag dinamici nel template HTML personalizzato scritto dall'utente
     if html_pers and html_pers.strip():
-        elements.append(Paragraph(html_pers.replace('\n', '<br/>'), normal_style))
+        html_compilato = html_pers \
+            .replace("{cliente}", cliente_info['nome']) \
+            .replace("{referente}", cliente_info['referente']) \
+            .replace("{telefono}", cliente_info['telefono']) \
+            .replace("{email}", cliente_info['email']) \
+            .replace("{indirizzo}", cliente_info['indirizzo']) \
+            .replace("{piva}", cliente_info['piva']) \
+            .replace("{titolo_attivita}", titolo) \
+            .replace("{tecnico}", tecnico) \
+            .replace("{dettagli_interventi}", dettagli) \
+            .replace("{nota_chiusura}", nota_chiusura) \
+            .replace("{data_corrente}", str(datetime.date.today()))
+            
+        elements.append(Paragraph(html_compilato.replace('\n', '<br/>'), normal_style))
         elements.append(Spacer(1, 10))
 
     data_info = [
@@ -299,20 +313,6 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     elements.append(Paragraph("<b>Dettaglio Interventi e Attività Eseguite:</b>", bold_style))
     elements.append(Spacer(1, 4))
     elements.append(Paragraph(dettagli.replace('\n', '<br/>'), normal_style))
-    elements.append(Spacer(1, 10))
-    
-    elements.append(Paragraph("<b>Materiali e Ricambi Utilizzati:</b>", bold_style))
-    data_mat = [
-        [Paragraph("<b>Codice / Descrizione Materiale</b>", bold_style), Paragraph("<b>Quantità</b>", bold_style)],
-        [Paragraph("- Nessun materiale extra registrato / Incluso nell'intervento", normal_style), Paragraph("-", normal_style)]
-    ]
-    t_mat = Table(data_mat, colWidths=[400, 140])
-    t_mat.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#EEEEEE')),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#DDDDDD')),
-        ('PADDING', (0,0), (-1,-1), 6),
-    ]))
-    elements.append(t_mat)
     elements.append(Spacer(1, 10))
     
     elements.append(Paragraph("<b>Esito e Note di Chiusura:</b>", bold_style))
@@ -369,9 +369,8 @@ if st.sidebar.button("🛠️ Gestione Tecnici / Utenti", use_container_width=Tr
 if st.sidebar.button("🏢 Gestione Gruppi", use_container_width=True):
     st.session_state.menu_selezionato = "🏢 Gestione Gruppi"
 
-# Sezione Report visibile ed accessibile SOLO ed esclusivamente se l'utente è ADMIN
 if st.session_state.gruppo_corrente == "admin":
-    if st.sidebar.button("⚙️ Report Studio (Designer)", use_container_width=True):
+    if st.sidebar.button("⚙️ Report Studio (Template)", use_container_width=True):
         st.session_state.menu_selezionato = "⚙️ Report"
 
 st.sidebar.markdown("---")
@@ -1117,10 +1116,10 @@ elif menu == "🏢 Gestione Gruppi":
         else:
             st.info("Nessun gruppo registrato.")
 
-# ==================== 6. REPORT STUDIO & DESIGNER PROFESSIONALE (SOLO ADMIN) ====================
+# ==================== 6. REPORT STUDIO & DESIGNER DINAMICO (SOLO ADMIN) ====================
 elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
-    st.title("⚙️ Report Studio (Designer Professionale & Testo Libero)")
-    st.markdown("Usa l'editor di testo avanzato per scrivere qualsiasi contenuto, formattarlo a piacimento e importare sfondi grafici dedicati. Tutto ciò che scrivi apparirà esattamente nel PDF ufficiale.")
+    st.title("⚙️ Report Studio (Template HTML & Tag Dinamici)")
+    st.markdown("Progetta il tuo report usando tag dinamici avanzati. Puoi inserire nei testi stringhe come `{cliente}`, `{referente}`, `{indirizzo}`, `{piva}`, `{titolo_attivita}`, `{tecnico}`, `{dettagli_interventi}` e `{nota_chiusura}` per fare in modo che il report compili automaticamente i dati dell'intervento.")
 
     tpl = get_template_report()
     tit_rep, f_fam, f_sz, col_p, html_pers, t_garz, t_pie = tpl
@@ -1128,16 +1127,16 @@ elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
     col_prop, col_design = st.columns([1.2, 1.2], gap="large")
 
     with col_prop:
-        st.subheader("✍️ Editor di Testo e Contenuto Libero")
+        st.subheader("✍️ Configurazione Template e Tag Dinamici")
         
-        st.markdown("##### 📂 Importa Sfondo / Modello Grafico")
-        layout_file = st.file_uploader("Carica template grafico (PNG, JPG)", type=["png", "jpg", "jpeg"])
+        st.markdown("##### 📂 Sfondo Grafico / Intestazione Intestata")
+        layout_file = st.file_uploader("Carica immagine di sfondo (PNG, JPG)", type=["png", "jpg", "jpeg"])
         if layout_file is not None:
             temp_path = os.path.join(os.path.dirname(DB_PATH), "modello_report_temp.png")
             with open(temp_path, "wb") as f:
                 f.write(layout_file.getbuffer())
             st.session_state.modello_report_path = temp_path
-            st.success("Sfondo grafico agganciato con successo al report!")
+            st.success("Sfondo grafico agganciato con successo!")
 
         if st.session_state.modello_report_path and os.path.exists(st.session_state.modello_report_path):
             if st.button("🗑️ Rimuovi Sfondo Grafico"):
@@ -1146,24 +1145,24 @@ elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
 
         st.markdown("---")
         with st.form("form_c1_props"):
-            st.markdown("##### ⚙️ Proprietà Generali del Report")
+            st.markdown("##### ⚙️ Proprietà Generali")
             new_titolo = st.text_input("Titolo Principale del Report", value=tit_rep)
             new_font = st.selectbox("Font Family", ["Helvetica", "Times-Roman", "Courier"], index=0)
             new_size = st.slider("Dimensione Font Base", min_value=8, max_value=14, value=f_sz)
             new_color = st.color_picker("Colore Principale (Accento)", value=col_p)
             
-            st.markdown("##### 📝 Blocco di Testo / HTML Personalizzato")
-            st.markdown("Scrivi liberamente tutto quello che vuoi (puoi usare formattazione o codice HTML personalizzato):")
+            st.markdown("##### 📝 Template HTML con Tag Dinamici")
+            st.info("Tag disponibili: `{cliente}`, `{referente}`, `{telefono}`, `{indirizzo}`, `{piva}`, `{titolo_attivita}`, `{tecnico}`, `{dettagli_interventi}`, `{nota_chiusura}`")
             
             if HAS_QUILL:
-                new_html = st_quill(value=html_pers, placeholder="Scrivi qui il tuo testo libero...", key="quill_editor")
+                new_html = st_quill(value=html_pers, placeholder="Scrivi il tuo layout HTML...", key="quill_editor")
             else:
-                new_html = st.text_area("Testo Libero / HTML", value=html_pers, height=180)
+                new_html = st.text_area("Layout HTML / Testo personalizzato", value=html_pers, height=180)
             
             new_garanzia = st.text_area("Testo Garanzia / Condizioni", value=t_garz)
             new_pie = st.text_input("Piè di pagina (Footer)", value=t_pie)
 
-            if st.form_submit_button("💾 Salva Configurazione Report", use_container_width=True):
+            if st.form_submit_button("💾 Salva Template Report", use_container_width=True):
                 conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM impostazioni_report")
@@ -1175,12 +1174,12 @@ elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
                 """, (new_titolo, new_font, new_size, new_color, new_html if new_html else "", new_garanzia, new_pie))
                 conn.commit()
                 conn.close()
-                st.success("Configurazione e testo salvati con successo!")
+                st.success("Template salvato con successo!")
                 st.rerun()
 
     with col_design:
-        st.subheader("🖥️ Anteprima Live del Report")
-        st.markdown("Ecco come apparirà il documento in stampa:")
+        st.subheader("🖥️ Anteprima del Report Dinamico")
+        st.markdown("Simulazione con dati di esempio:")
 
         if st.session_state.modello_report_path and os.path.exists(st.session_state.modello_report_path):
             st.image(st.session_state.modello_report_path, caption="Sfondo Grafico Attivo", use_container_width=True)
@@ -1190,11 +1189,19 @@ elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
             st.markdown(f"<h3 style='color: {new_color}; margin: 0;'>📄 {new_titolo}</h3>", unsafe_allow_html=True)
             st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
             
-            if html_pers and html_pers.strip():
-                st.markdown(f"<div style='background: #f8f9fa; border-left: 4px solid {new_color}; padding: 8px; margin-bottom: 10px;'>{html_pers}</div>", unsafe_allow_html=True)
-
-            st.caption("<b>📋 Dati Cliente:</b> [Nome Azienda] | [P.IVA]<br><b>🛠️ Tecnico Assegnato:</b> [Nome Tecnico]")
-            st.markdown("<div style='background: #eef2f5; padding: 6px; margin-top: 8px; font-size: 11px;'>⚙️ <b>Area Dettagli Interventi e Materiali</b></div>", unsafe_allow_html=True)
+            preview_html = html_pers if html_pers else "<b>Cliente:</b> {cliente}<br><b>Attività:</b> {titolo_attivita}<br><b>Dettagli:</b> {dettagli_interventi}"
+            preview_compilata = preview_html \
+                .replace("{cliente}", "Azienda Esempio Srl") \
+                .replace("{referente}", "Mario Rossi") \
+                .replace("{telefono}", "3331234567") \
+                .replace("{indirizzo}", "Via Roma 10, Firenze") \
+                .replace("{piva}", "01234567890") \
+                .replace("{titolo_attivita}", "Manutenzione Impianto") \
+                .replace("{tecnico}", "Tecnico Demo") \
+                .replace("{dettagli_interventi}", "Controllo generale eseguito con successo.") \
+                .replace("{nota_chiusura}", "Intervento ultimato.")
+                
+            st.markdown(f"<div style='background: #f8f9fa; border-left: 4px solid {new_color}; padding: 8px; margin-bottom: 10px;'>{preview_compilata}</div>", unsafe_allow_html=True)
             st.markdown(f"<div style='font-size: 11px; margin-top: 8px;'><i>Garanzia:</i> {new_garanzia}</div>", unsafe_allow_html=True)
             st.markdown(f"<div style='text-align: center; font-size: 10px; color: #777; margin-top: 15px;'>{new_pie}</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
