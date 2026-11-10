@@ -118,7 +118,6 @@ def inizializza_db():
         )
     ''')
     
-    # Aggiunta sicura colonne tabella impostazioni_report se già esistente con struttura vecchia
     colonne_report = [
         ("titolo_report", "TEXT DEFAULT 'RAPPORTO DI INTERVENTO'"),
         ("font_family", "TEXT DEFAULT 'Helvetica'"),
@@ -161,6 +160,9 @@ if 'autenticato' not in st.session_state:
     st.session_state.autenticato = False
     st.session_state.utente_corrente = None
     st.session_state.gruppo_corrente = None
+
+if 'modello_report_path' not in st.session_state:
+    st.session_state.modello_report_path = None
 
 if not st.session_state.autenticato:
     st.title(f"🔐 Accesso Riservato - {NOME_DITTA}")
@@ -238,7 +240,7 @@ def get_template_report():
         pass
     return ("RAPPORTO DI INTERVENTO", "Helvetica", 10, "#1976D2", 1, 1, 1, 1, 1, "Garanzia standard...", "Piè di pagina...")
 
-# Generatore PDF Avanzato: preleva i dati automaticamente dall'anagrafica cliente
+# Generatore PDF Avanzato: supporta template di sfondo personalizzati caricati dall'admin
 def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     tpl = get_template_report()
     titolo_rep, font_fam, font_sz, colore_p, m_head, m_det, m_mat, m_gar, m_fir, t_gar, t_pie = tpl
@@ -258,6 +260,15 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=font_sz, textColor=colors.HexColor('#333333'), spaceAfter=6)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=font_sz, fontName='Helvetica-Bold', textColor=colors.HexColor('#111111'))
     
+    # Se è stato caricato un modello grafico personalizzato, lo inseriamo come sfondo/intestazione principale
+    if st.session_state.modello_report_path and os.path.exists(st.session_state.modello_report_path):
+        try:
+            from reportlab.platypus import Image as RLImage
+            elements.append(RLImage(st.session_state.modello_report_path, width=540, height=120))
+            elements.append(Spacer(1, 10))
+        except Exception:
+            pass
+
     if m_head:
         data_header = [
             [
@@ -360,8 +371,11 @@ if st.sidebar.button("🛠️ Gestione Tecnici / Utenti", use_container_width=Tr
     st.session_state.menu_selezionato = "🛠️ Gestione Tecnici / Utenti"
 if st.sidebar.button("🏢 Gestione Gruppi", use_container_width=True):
     st.session_state.menu_selezionato = "🏢 Gestione Gruppi"
-if st.sidebar.button("⚙️ Report", use_container_width=True):
-    st.session_state.menu_selezionato = "⚙️ Report"
+
+# Sezione Report visibile ed accessibile SOLO ed esclusivamente se l'utente è ADMIN
+if st.session_state.gruppo_corrente == "admin":
+    if st.sidebar.button("⚙️ Report", use_container_width=True):
+        st.session_state.menu_selezionato = "⚙️ Report"
 
 st.sidebar.markdown("---")
 dim_testo = st.sidebar.slider("Dimensione testo Planning (px)", min_value=12, max_value=30, value=16)
@@ -1106,40 +1120,45 @@ elif menu == "🏢 Gestione Gruppi":
         else:
             st.info("Nessun gruppo registrato.")
 
-# ==================== 6. REPORT STUDIO ====================
-elif menu == "⚙️ Report":
-    st.title("⚙️ Report Studio")
-    st.markdown("Progetta il layout del report in stile C1 Designer e **importa qualsiasi immagine o layout personalizzato (PDF, JPEG, PNG)** da sovrapporre o utilizzare come modello.")
+# ==================== 6. REPORT STUDIO (SOLO ADMIN) ====================
+elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
+    st.title("⚙️ Report Studio (Designer 3D Avanzato)")
+    st.markdown("Accedi direttamente al modello visivo per personalizzare il report a piacimento, gestire i campi e caricare sfondi grafici dedicati.")
 
     tpl = get_template_report()
     tit_rep, f_fam, f_sz, col_p, m_hd, m_dt, m_mt, m_gr, m_fr, t_garz, t_pie = tpl
 
-    col_prop, col_design = st.columns([1, 1.5], gap="large")
+    col_prop, col_design = st.columns([1, 1.3], gap="large")
 
     with col_prop:
-        st.subheader("📌 Properties (Pannello Proprietà)")
+        st.subheader("🛠️ Toolbox & Proprietà Designer")
         
-        st.markdown("##### 📂 Importa Layout Esterno (PDF / Immagine)")
-        layout_file = st.file_uploader("Carica modello di layout (PDF, JPG, PNG)", type=["pdf", "png", "jpg", "jpeg"])
+        st.markdown("##### 📂 Carica Sfondo / Modello Grafico")
+        layout_file = st.file_uploader("Importa template (PNG, JPG)", type=["png", "jpg", "jpeg"])
         if layout_file is not None:
-            st.success(f"Layout '{layout_file.name}' importato con successo nel motore di stampa!")
-            if layout_file.type in ["image/png", "image/jpeg"]:
-                st.image(layout_file, caption="Anteprima Layout Sfondo Importato", use_container_width=True)
-            else:
-                st.info("Documento PDF caricato come modello di riferimento.")
+            temp_path = os.path.join(os.path.dirname(DB_PATH), "modello_report_temp.png")
+            with open(temp_path, "wb") as f:
+                f.write(layout_file.getbuffer())
+            st.session_state.modello_report_path = temp_path
+            st.success("Modello grafico agganciato con successo al motore di stampa!")
+
+        if st.session_state.modello_report_path and os.path.exists(st.session_state.modello_report_path):
+            if st.button("🗑️ Rimuovi Modello Sfondo"):
+                st.session_state.modello_report_path = None
+                st.rerun()
 
         st.markdown("---")
         with st.form("form_c1_props"):
-            st.markdown("##### Appearance & Behavior")
+            st.markdown("##### Configurazione Campi & Testi")
             new_titolo = st.text_input("Titolo Report", value=tit_rep)
             new_font = st.selectbox("Font Family", ["Helvetica", "Times-Roman", "Courier"], index=0)
-            new_size = st.slider("Font Size Base", min_value=8, max_value=14, value=f_sz)
-            new_color = st.color_picker("Colore Principale (Accento)", value=col_p)
+            new_size = st.slider("Dimensione Font Base", min_value=8, max_value=14, value=f_sz)
+            new_color = st.color_picker("Colore Principale Accent", value=col_p)
             
             st.markdown("---")
-            st.markdown("##### Sezioni del Report (Sections)")
+            st.markdown("##### Sezioni Attive nel Modello")
             c_hd = st.checkbox("Mostra Header Intestazione", value=bool(m_hd))
-            c_dt = st.checkbox("Mostra Sezione Dettagli", value=bool(m_dt))
+            c_dt = st.checkbox("Mostra Sezione Dettagli Lavori", value=bool(m_dt))
             c_mt = st.checkbox("Mostra Tabella Materiali", value=bool(m_mt))
             c_gr = st.checkbox("Mostra Box Garanzia", value=bool(m_gr))
             c_fr = st.checkbox("Mostra Sezione Firme", value=bool(m_fr))
@@ -1147,7 +1166,7 @@ elif menu == "⚙️ Report":
             new_garanzia = st.text_area("Testo Garanzia / Condizioni", value=t_garz)
             new_pie = st.text_input("Piè di pagina Legale", value=t_pie)
 
-            if st.form_submit_button("Salva Configurazione Report", use_container_width=True):
+            if st.form_submit_button("💾 Salva Configurazione Designer", use_container_width=True):
                 conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM impostazioni_report")
@@ -1160,39 +1179,30 @@ elif menu == "⚙️ Report":
                 """, (new_titolo, new_font, new_size, new_color, int(c_hd), int(c_dt), int(c_mt), int(c_gr), int(c_fr), new_garanzia, new_pie))
                 conn.commit()
                 conn.close()
-                st.success("Configurazione salvata con successo!")
+                st.success("Layout aggiornato nel database!")
                 st.rerun()
 
     with col_design:
-        st.subheader("📐 Report Structure & Live Preview")
-        st.markdown("Anteprima visiva interattiva delle sezioni (Header, Dettagli, Materiali, Footer) strutturata come in C1 Designer:")
+        st.subheader("🖥️ Anteprima Designer 3D in Tempo Reale")
+        st.markdown("Simulazione interattiva del foglio di stampa configurato:")
 
-        # Container nativo con bordo stilizzato per simulare il foglio di anteprima in modo pulito e sicuro
+        if st.session_state.modello_report_path and os.path.exists(st.session_state.modello_report_path):
+            st.image(st.session_state.modello_report_path, caption="Modello Grafico Personalizzato Attivo", use_container_width=True)
+
         with st.container(border=True):
-            st.markdown(f"**📄 Report Header (Intestazione Azienda & Titolo)**")
-            st.markdown(f"<h3 style='color: {new_color}; margin-top: 0;'>{new_titolo}</h3>", unsafe_allow_html=True)
-            st.markdown("---")
+            st.markdown(f"<div style='border: 2px dashed {new_color}; padding: 12px; background: #fafafa; border-radius: 6px;'>", unsafe_allow_html=True)
+            st.markdown(f"<h4 style='color: {new_color}; margin: 0;'>📄 {new_titolo}</h4>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 6px 0;'>", unsafe_allow_html=True)
+            st.caption("<b>Dati Anagrafica Cliente:</b> [Nome Azienda] | [P.IVA]<br><b>Tecnico Assegnato:</b> [Nome Tecnico]")
             
-            st.markdown("**📋 PageHeader / Dati Cliente (Acquisiti dall'Anagrafica)**")
-            st.caption("<b>Cliente:</b> [Nome Azienda da Anagrafica] | <b>P.IVA:</b> [P.IVA]<br><b>Indirizzo:</b> [Indirizzo Cliente] | <b>Referente:</b> [Referente]")
-            st.markdown("---")
-            
-            st.markdown("**⚙️ Detail Section (Lavorazioni Eseguite)**")
-            st.caption("- Descrizione dettagliata dell'intervento tecnico registrato in chiusura...")
-            
+            if c_dt:
+                st.markdown("<div style='background: #eef2f5; padding: 4px; margin-top: 6px; font-size: 11px;'>⚙️ <b>Area Dettagli Interventi</b></div>", unsafe_allow_html=True)
             if c_mt:
-                st.markdown("---")
-                st.markdown("**🛠️ Materiali e Ricambi**")
-                st.caption("Tabella materiali utilizzati")
-                
+                st.markdown("<div style='background: #eef2f5; padding: 4px; margin-top: 6px; font-size: 11px;'>🛠️ <b>Tabella Materiali e Ricambi</b></div>", unsafe_allow_html=True)
             if c_gr:
-                st.markdown("---")
-                st.markdown("**⚖️ Box Condizioni e Garanzia**")
-                st.caption(f"{new_garanzia[:80]}...")
-                
+                st.markdown("<div style='background: #eef2f5; padding: 4px; margin-top: 6px; font-size: 11px;'>⚖️ <b>Box Condizioni e Garanzia</b></div>", unsafe_allow_html=True)
             if c_fr:
-                st.markdown("---")
-                st.markdown("**✍️ Sezione Firme (Tecnico / Cliente)**")
+                st.markdown("<div style='background: #eef2f5; padding: 4px; margin-top: 6px; font-size: 11px;'>✍️ <b>Spazio Firme (Tecnico / Cliente)</b></div>", unsafe_allow_html=True)
                 
-            st.markdown("---")
-            st.markdown(f"<div style='text-align: center; font-size: 11px; color: #666;'>👣 PageFooter: {new_pie}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center; font-size: 10px; color: #777; margin-top: 10px;'>{new_pie}</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
