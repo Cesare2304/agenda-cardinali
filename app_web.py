@@ -6,6 +6,13 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 
+# Importazione per editor di testo avanzato (se presente in requirements.txt)
+try:
+    from streamlit_quill import st_quill
+    HAS_QUILL = True
+except ImportError:
+    HAS_QUILL = False
+
 # Importazioni per ReportLab (PDF Design Avanzato)
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
@@ -231,7 +238,7 @@ def get_template_report():
         pass
     return ("RAPPORTO DI INTERVENTO", "Helvetica", 10, "#1976D2", "", "Garanzia standard...", "Piè di pagina...")
 
-# Generatore PDF Avanzato con Designer Professionale e Sfondo Svariato
+# Generatore PDF Avanzato con Designer Professionale e Testo Libero
 def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     tpl = get_template_report()
     titolo_rep, font_fam, font_sz, colore_p, html_pers, t_gar, t_pie = tpl
@@ -251,7 +258,6 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=font_sz, textColor=colors.HexColor('#333333'), spaceAfter=6)
     bold_style = ParagraphStyle('BoldStyle', parent=styles['Normal'], fontSize=font_sz, fontName='Helvetica-Bold', textColor=colors.HexColor('#111111'))
     
-    # Se è stato caricato un modello grafico in immagine, viene inserito come sfondo principale
     if st.session_state.modello_report_path and os.path.exists(st.session_state.modello_report_path):
         try:
             from reportlab.platypus import Image as RLImage
@@ -260,7 +266,6 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
         except Exception:
             pass
 
-    # Header standard o personalizzato via Designer
     data_header = [
         [
             Paragraph(f"<b>{NOME_DITTA}</b><br/><font size=8>P.IVA: 01234567890 | Via Roma 1, Firenze<br/>Tel: 055123456 | Email: info@agendacardinali.it</font>", company_style),
@@ -272,7 +277,7 @@ def genera_pdf_report(cliente_info, titolo, tecnico, dettagli, nota_chiusura):
     elements.append(t_header)
     elements.append(HRFlowable(width="100%", thickness=2, color=main_color, spaceAfter=12))
     
-    # Se l'utente ha scritto del codice HTML personalizzato nel Designer 3D, lo iniettiamo direttamente nel PDF come paragrafo formattato
+    # Inserimento del testo libero scritto dall'utente nel Designer Professionale
     if html_pers and html_pers.strip():
         elements.append(Paragraph(html_pers.replace('\n', '<br/>'), normal_style))
         elements.append(Spacer(1, 10))
@@ -1115,25 +1120,25 @@ elif menu == "🏢 Gestione Gruppi":
 
 # ==================== 6. REPORT STUDIO & DESIGNER PROFESSIONALE (SOLO ADMIN) ====================
 elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
-    st.title("⚙️ Report Studio (Designer Professionale 3D)")
-    st.markdown("Crea e personalizza liberamente il tuo modello di report in stile C1 Designer. Scrivi intestazioni, note o blocchi HTML personalizzati e importa sfondi grafici dedicati.")
+    st.title("⚙️ Report Studio (Designer Professionale & Testo Libero)")
+    st.markdown("Usa l'editor di testo avanzato per scrivere qualsiasi contenuto, formattarlo a piacimento e importare sfondi grafici dedicati. Tutto ciò che scrivi apparirà esattamente nel PDF ufficiale.")
 
     tpl = get_template_report()
     tit_rep, f_fam, f_sz, col_p, html_pers, t_garz, t_pie = tpl
 
-    col_prop, col_design = st.columns([1, 1.4], gap="large")
+    col_prop, col_design = st.columns([1.2, 1.2], gap="large")
 
     with col_prop:
-        st.subheader("🛠️ Toolbox di Modifica Avanzata")
+        st.subheader("✍️ Editor di Testo e Contenuto Libero")
         
-        st.markdown("##### 📂 Carica Sfondo o Modello Grafico")
-        layout_file = st.file_uploader("Importa template grafico (PNG, JPG)", type=["png", "jpg", "jpeg"])
+        st.markdown("##### 📂 Importa Sfondo / Modello Grafico")
+        layout_file = st.file_uploader("Carica template grafico (PNG, JPG)", type=["png", "jpg", "jpeg"])
         if layout_file is not None:
             temp_path = os.path.join(os.path.dirname(DB_PATH), "modello_report_temp.png")
             with open(temp_path, "wb") as f:
                 f.write(layout_file.getbuffer())
             st.session_state.modello_report_path = temp_path
-            st.success("Modello grafico caricato e applicato come sfondo del report!")
+            st.success("Sfondo grafico agganciato con successo al report!")
 
         if st.session_state.modello_report_path and os.path.exists(st.session_state.modello_report_path):
             if st.button("🗑️ Rimuovi Sfondo Grafico"):
@@ -1142,19 +1147,24 @@ elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
 
         st.markdown("---")
         with st.form("form_c1_props"):
-            st.markdown("##### Proprietà & Editor Contenuti")
-            new_titolo = st.text_input("Titolo Principale Report", value=tit_rep)
+            st.markdown("##### ⚙️ Proprietà Generali del Report")
+            new_titolo = st.text_input("Titolo Principale del Report", value=tit_rep)
             new_font = st.selectbox("Font Family", ["Helvetica", "Times-Roman", "Courier"], index=0)
             new_size = st.slider("Dimensione Font Base", min_value=8, max_value=14, value=f_sz)
             new_color = st.color_picker("Colore Principale (Accento)", value=col_p)
             
-            st.markdown("##### ✍️ Blocco Personalizzato (HTML / Testo Libero)")
-            new_html = st.text_area("Scrivi quello che vuoi inserire nel report (es. note fisse, diciture speciali, tabelle personalizzate)", value=html_pers, height=120)
+            st.markdown("##### 📝 Blocco di Testo / HTML Personalizzato")
+            st.markdown("Scrivi liberamente tutto quello che vuoi (puoi usare formattazione o codice HTML personalizzato):")
             
-            new_garanzia = st.text_area("Testo Garanzia / Condizioni Legali", value=t_garz)
+            if HAS_QUILL:
+                new_html = st_quill(value=html_pers, placeholder="Scrivi qui il tuo testo libero...", key="quill_editor")
+            else:
+                new_html = st.text_area("Testo Libero / HTML", value=html_pers, height=180)
+            
+            new_garanzia = st.text_area("Testo Garanzia / Condizioni", value=t_garz)
             new_pie = st.text_input("Piè di pagina (Footer)", value=t_pie)
 
-            if st.form_submit_button("💾 Salva e Aggiorna Designer", use_container_width=True):
+            if st.form_submit_button("💾 Salva Configurazione Report", use_container_width=True):
                 conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM impostazioni_report")
@@ -1163,18 +1173,18 @@ elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
                     (titolo_report, font_family, font_size, colore_primario, 
                      template_html_personalizzato, testo_garanzia, testo_pie) 
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (new_titolo, new_font, new_size, new_color, new_html, new_garanzia, new_pie))
+                """, (new_titolo, new_font, new_size, new_color, new_html if new_html else "", new_garanzia, new_pie))
                 conn.commit()
                 conn.close()
-                st.success("Modifiche salvate nel motore di stampa!")
+                st.success("Configurazione e testo salvati con successo!")
                 st.rerun()
 
     with col_design:
-        st.subheader("🖥️ Anteprima 3D del Report")
-        st.markdown("Simulazione interattiva del documento ufficiale pronto per la stampa:")
+        st.subheader("🖥️ Anteprima Live del Report")
+        st.markdown("Ecco come apparirà il documento in stampa:")
 
         if st.session_state.modello_report_path and os.path.exists(st.session_state.modello_report_path):
-            st.image(st.session_state.modello_report_path, caption="Sfondo Grafico Importato Attivo", use_container_width=True)
+            st.image(st.session_state.modello_report_path, caption="Sfondo Grafico Attivo", use_container_width=True)
 
         with st.container(border=True):
             st.markdown(f"<div style='border: 2px dashed {new_color}; padding: 15px; background: #ffffff; border-radius: 8px;'>", unsafe_allow_html=True)
@@ -1182,9 +1192,9 @@ elif menu == "⚙️ Report" and st.session_state.gruppo_corrente == "admin":
             st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
             
             if html_pers and html_pers.strip():
-                st.markdown(f"<div style='background: #fdfdfd; border-left: 3px solid {new_color}; padding: 6px; margin-bottom: 8px; font-size: 12px;'>{html_pers}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background: #f8f9fa; border-left: 4px solid {new_color}; padding: 8px; margin-bottom: 10px;'>{html_pers}</div>", unsafe_allow_html=True)
 
-            st.caption("<b>📋 Dati Anagrafica Cliente:</b> [Nome Azienda] | [P.IVA]<br><b>🛠️ Tecnico Assegnato:</b> [Nome Tecnico]")
+            st.caption("<b>📋 Dati Cliente:</b> [Nome Azienda] | [P.IVA]<br><b>🛠️ Tecnico Assegnato:</b> [Nome Tecnico]")
             st.markdown("<div style='background: #eef2f5; padding: 6px; margin-top: 8px; font-size: 11px;'>⚙️ <b>Area Dettagli Interventi e Materiali</b></div>", unsafe_allow_html=True)
             st.markdown(f"<div style='font-size: 11px; margin-top: 8px;'><i>Garanzia:</i> {new_garanzia}</div>", unsafe_allow_html=True)
             st.markdown(f"<div style='text-align: center; font-size: 10px; color: #777; margin-top: 15px;'>{new_pie}</div>", unsafe_allow_html=True)
